@@ -1,0 +1,519 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Branch {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String       @db.VarChar(100)
+  address          String
+  city             String?      @db.VarChar(100)
+  state            String?      @db.VarChar(100)
+  pincode          String?      @db.VarChar(10)
+  contactPrimary   String?      @map("contact_primary") @db.VarChar(15)
+  contactSecondary String?      @map("contact_secondary") @db.VarChar(15)
+  email            String?      @db.VarChar(100)
+  logoUrl          String?      @map("logo_url")
+  signatureUrl     String?      @map("signature_url")
+  isActive         Boolean      @default(true) @map("is_active")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  floors           Floor[]
+  rooms            Room[]
+  admins           Admin[]
+  notices          Notice[]
+  foodMenus        FoodMenu[]
+  mealTimings      MealTimings?
+  settings         Settings?
+  semesterPeriods  SemesterPeriod[]
+
+  @@map("branches")
+}
+
+model Floor {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String  @map("branch_id") @db.Uuid
+  floorNumber Int     @map("floor_number")
+  floorName   String? @map("floor_name") @db.VarChar(50)
+  groupType   String  @default("floor") @map("group_type") @db.VarChar(10)
+  branch      Branch  @relation(fields: [branchId], references: [id])
+  rooms       Room[]
+
+  @@unique([branchId, floorNumber])
+  @@map("floors")
+}
+
+model Room {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId        String        @map("branch_id") @db.Uuid
+  floorId         String        @map("floor_id") @db.Uuid
+  roomNumber      String        @map("room_number") @db.VarChar(20)
+  roomType        String        @map("room_type") @db.VarChar(20)
+  bedCount        Int           @map("bed_count")
+  hasAttachedBath Boolean       @default(false) @map("has_attached_bath")
+  isFurnished     Boolean       @default(true) @map("is_furnished")
+  hasWifi         Boolean       @default(true) @map("has_wifi")
+  monthlyRent     Decimal?      @map("monthly_rent") @db.Decimal(10, 2)
+  semesterRent    Decimal?      @map("semester_rent") @db.Decimal(10, 2)
+  annualRent      Decimal?      @map("annual_rent") @db.Decimal(10, 2)
+  status          String        @default("available") @db.VarChar(20)
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  branch          Branch        @relation(fields: [branchId], references: [id])
+  floor           Floor         @relation(fields: [floorId], references: [id])
+  beds            Bed[]
+  students        Student[]
+  complaints      Complaint[]
+  roomHistoryFrom RoomHistory[] @relation("FromRoom")
+  roomHistoryTo   RoomHistory[] @relation("ToRoom")
+
+  @@unique([branchId, roomNumber])
+  @@map("rooms")
+}
+
+model Bed {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roomId          String        @map("room_id") @db.Uuid
+  bedLabel        String        @map("bed_label") @db.VarChar(5)
+  isOccupied      Boolean       @default(false) @map("is_occupied")
+  room            Room          @relation(fields: [roomId], references: [id])
+  student         Student?
+  roomHistoryFrom RoomHistory[] @relation("FromBed")
+  roomHistoryTo   RoomHistory[] @relation("ToBed")
+
+  @@unique([roomId, bedLabel])
+  @@map("beds")
+}
+
+model Admin {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supabaseAuthId     String        @unique @map("supabase_auth_id") @db.Uuid
+  name               String        @db.VarChar(100)
+  email              String        @unique @db.VarChar(100)
+  mobile             String        @db.VarChar(15)
+  role               String        @default("staff") @db.VarChar(20)
+  branchId           String?       @map("branch_id") @db.Uuid
+  isActive           Boolean       @default(true) @map("is_active")
+  lastLogin          DateTime?     @map("last_login")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  branch             Branch?       @relation(fields: [branchId], references: [id])
+  activityLogs       ActivityLog[]
+  assignedComplaints Complaint[]   @relation("AssignedComplaints")
+  resolvedComplaints Complaint[]   @relation("ResolvedComplaints")
+  recordedPayments   Payment[]
+  verifiedDocs       Document[]
+  approvedOutpass    Outpass[]     @relation("ApprovedOutpass")
+  processedExits     RenewalExit[]
+  roomHistories      RoomHistory[]
+  admittedStudents   Student[]     @relation("AdmittedBy")
+  notices            Notice[]
+
+  @@map("admins")
+}
+
+model Student {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supabaseAuthId       String?       @unique @map("supabase_auth_id") @db.Uuid
+  studentId            String        @unique @map("student_id") @db.VarChar(20)
+  name                 String        @db.VarChar(100)
+  fatherName           String?       @map("father_name") @db.VarChar(100)
+  motherName           String?       @map("mother_name") @db.VarChar(100)
+  mobile               String        @db.VarChar(15)
+  parentMobile         String?       @map("parent_mobile") @db.VarChar(15)
+  motherMobile         String?       @map("mother_mobile") @db.VarChar(15)
+  email                String?       @db.VarChar(100)
+  aadhaar              String?       @db.VarChar(12)
+  fatherAadhaar        String?       @map("father_aadhaar") @db.VarChar(12)
+  college              String?       @db.VarChar(150)
+  course               String?       @db.VarChar(100)
+  branch               String?       @db.VarChar(100)
+  yearOfStudy          Int?          @map("year_of_study")
+  semester             Int?
+  totalSemesters       Int?          @default(8) @map("total_semesters")
+  permanentAddress     String?       @map("permanent_address")
+  emergencyContact     String?       @map("emergency_contact") @db.VarChar(15)
+  emergencyContactName String?       @map("emergency_contact_name") @db.VarChar(100)
+  joiningDate          DateTime      @map("joining_date") @db.Date
+  stayDuration         String        @map("stay_duration") @db.VarChar(20)
+  stayEndDate          DateTime      @map("stay_end_date") @db.Date
+  roomId               String?       @map("room_id") @db.Uuid
+  bedId                String?       @unique @map("bed_id") @db.Uuid
+  rentPackage          String        @map("rent_package") @db.VarChar(20)
+  depositAmount        Decimal       @default(0) @map("deposit_amount") @db.Decimal(10, 2)
+  depositRefunded      Boolean       @default(false) @map("deposit_refunded")
+  depositRefundDate    DateTime?     @map("deposit_refund_date") @db.Date
+  status               String        @default("active") @db.VarChar(20)
+  isFirstLogin         Boolean       @default(true) @map("is_first_login")
+  notes                String?
+  avatarUrl            String?       @map("avatar_url")
+  createdBy            String?       @map("created_by") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  room                 Room?         @relation(fields: [roomId], references: [id])
+  bed                  Bed?          @relation(fields: [bedId], references: [id])
+  admittedBy           Admin?        @relation("AdmittedBy", fields: [createdBy], references: [id])
+  parent               Parent?
+  invoices             Invoice[]
+  payments             Payment[]
+  complaints           Complaint[]
+  documents            Document[]
+  outpass              Outpass[]
+  feedback             Feedback[]
+  roomHistory          RoomHistory[]
+  renewalExits         RenewalExit[]
+  whatsappLogs         WhatsappLog[]
+  extraCharges         ExtraCharge[]
+
+  @@map("students")
+}
+
+model Parent {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String   @unique @map("student_id") @db.Uuid
+  supabaseAuthId  String?  @unique @map("supabase_auth_id") @db.Uuid
+  name            String   @db.VarChar(100)
+  mobile          String   @unique @db.VarChar(15)
+  alternateMobile String?  @map("alternate_mobile") @db.VarChar(15)
+  relation        String?  @db.VarChar(50)
+  address         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  student         Student  @relation(fields: [studentId], references: [id])
+
+  @@map("parents")
+}
+
+model Invoice {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId     String    @map("student_id") @db.Uuid
+  invoiceNumber String    @unique @map("invoice_number") @db.VarChar(30)
+  type          String    @db.VarChar(30)
+  description   String?
+  amount        Decimal   @db.Decimal(10, 2)
+  lateFee       Decimal   @default(0) @map("late_fee") @db.Decimal(10, 2)
+  discount      Decimal   @default(0) @db.Decimal(10, 2)
+  totalAmount   Decimal   @map("total_amount") @db.Decimal(10, 2)
+  dueDate       DateTime  @map("due_date") @db.Date
+  generatedDate DateTime  @default(now()) @map("generated_date") @db.Date
+  status        String    @default("due") @db.VarChar(20)
+  paidAmount    Decimal   @default(0) @map("paid_amount") @db.Decimal(10, 2)
+  balance       Decimal   @db.Decimal(10, 2)
+  semesterNumber Int?     @map("semester_number")
+  notes         String?
+  generatedBy   String?   @map("generated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  student       Student   @relation(fields: [studentId], references: [id])
+  payments      Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId         String   @map("invoice_id") @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  receiptNumber     String   @unique @map("receipt_number") @db.VarChar(30)
+  amount            Decimal  @db.Decimal(10, 2)
+  paymentMode       String   @map("payment_mode") @db.VarChar(20)
+  transactionRef    String?  @map("transaction_ref") @db.VarChar(100)
+  utrVerified       Boolean  @default(false) @map("utr_verified")
+  utrRejected       Boolean  @default(false) @map("utr_rejected")
+  utrRejectedReason String?  @map("utr_rejected_reason") @db.VarChar(200)
+  paidDate          DateTime @map("paid_date") @db.Date
+  recordedBy        String?  @map("recorded_by") @db.Uuid
+  cashfreeOrderId   String?  @map("cashfree_order_id") @db.VarChar(100)
+  cashfreePaymentId String?  @map("cashfree_payment_id") @db.VarChar(100)
+  cashfreeStatus    String?  @map("cashfree_status") @db.VarChar(30)
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id])
+  student           Student  @relation(fields: [studentId], references: [id])
+  recordedByAdmin   Admin?   @relation(fields: [recordedBy], references: [id])
+
+  @@map("payments")
+}
+
+model ExtraCharge {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  type        String   @db.VarChar(50)
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  chargeDate  DateTime @default(now()) @map("charge_date") @db.Date
+  addedBy     String   @map("added_by") @db.Uuid
+  invoiceId   String?  @map("invoice_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  student     Student  @relation(fields: [studentId], references: [id])
+
+  @@map("extra_charges")
+}
+
+model Notice {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId       String?   @map("branch_id") @db.Uuid
+  title          String    @db.VarChar(200)
+  description    String
+  category       String    @db.VarChar(30)
+  priority       String    @default("medium") @db.VarChar(20)
+  createdBy      String    @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  expiryDate     DateTime? @map("expiry_date") @db.Date
+  isPublished    Boolean   @default(false) @map("is_published")
+  publishedAt    DateTime? @map("published_at")
+  whatsappSent   Boolean   @default(false) @map("whatsapp_sent")
+  whatsappSentAt DateTime? @map("whatsapp_sent_at")
+  branch         Branch?   @relation(fields: [branchId], references: [id])
+  createdByAdmin Admin     @relation(fields: [createdBy], references: [id])
+
+  @@map("notices")
+}
+
+model Complaint {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  complaintNumber String             @unique @map("complaint_number") @db.VarChar(20)
+  studentId       String             @map("student_id") @db.Uuid
+  roomId          String             @map("room_id") @db.Uuid
+  category        String             @db.VarChar(30)
+  description     String
+  photoUrl        String?            @map("photo_url")
+  priority        String             @default("medium") @db.VarChar(20)
+  status          String             @default("new") @db.VarChar(20)
+  assignedTo      String?            @map("assigned_to") @db.Uuid
+  resolutionNote  String?            @map("resolution_note")
+  resolvedBy      String?            @map("resolved_by") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  resolvedAt      DateTime?          @map("resolved_at")
+  student         Student            @relation(fields: [studentId], references: [id])
+  room            Room               @relation(fields: [roomId], references: [id])
+  assignedAdmin   Admin?             @relation("AssignedComplaints", fields: [assignedTo], references: [id])
+  resolvedByAdmin Admin?             @relation("ResolvedComplaints", fields: [resolvedBy], references: [id])
+  comments        ComplaintComment[]
+
+  @@map("complaints")
+}
+
+model ComplaintComment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  complaintId String    @map("complaint_id") @db.Uuid
+  authorId    String    @map("author_id") @db.Uuid
+  authorType  String    @map("author_type") @db.VarChar(10)
+  comment     String
+  createdAt   DateTime  @default(now()) @map("created_at")
+  complaint   Complaint @relation(fields: [complaintId], references: [id])
+
+  @@map("complaint_comments")
+}
+
+model FoodMenu {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId     String  @map("branch_id") @db.Uuid
+  month        Int
+  year         Int
+  dayOfMonth   Int     @map("day_of_month")
+  mealType     String  @map("meal_type") @db.VarChar(15)
+  items        String
+  isSpecial    Boolean @default(false) @map("is_special")
+  specialLabel String? @map("special_label") @db.VarChar(100)
+  specialNote  String? @map("special_note")
+  isHoliday    Boolean @default(false) @map("is_holiday")
+  branch       Branch  @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, month, year, dayOfMonth, mealType])
+  @@map("food_menu")
+}
+
+model MealTimings {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId       String   @unique @map("branch_id") @db.Uuid
+  breakfastStart String   @default("07:30") @map("breakfast_start")
+  breakfastEnd   String   @default("09:30") @map("breakfast_end")
+  lunchStart     String   @default("12:30") @map("lunch_start")
+  lunchEnd       String   @default("14:30") @map("lunch_end")
+  snacksStart    String   @default("16:30") @map("snacks_start")
+  snacksEnd      String   @default("17:30") @map("snacks_end")
+  dinnerStart    String   @default("19:30") @map("dinner_start")
+  dinnerEnd      String   @default("21:30") @map("dinner_end")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  branch         Branch   @relation(fields: [branchId], references: [id])
+
+  @@map("meal_timings")
+}
+
+model Outpass {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outpassNumber        String    @unique @map("outpass_number") @db.VarChar(20)
+  studentId            String    @map("student_id") @db.Uuid
+  type                 String    @db.VarChar(10)
+  fromDate             DateTime  @map("from_date") @db.Date
+  toDate               DateTime  @map("to_date") @db.Date
+  fromTime             String?   @map("from_time") @db.VarChar(5)
+  toTime               String?   @map("to_time") @db.VarChar(5)
+  reason               String
+  destination          String?   @db.VarChar(200)
+  contactAtDestination String?   @map("contact_at_destination") @db.VarChar(15)
+  status               String    @default("pending") @db.VarChar(20)
+  approvedBy           String?   @map("approved_by") @db.Uuid
+  approvalNote         String?   @map("approval_note")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  returnConfirmedAt    DateTime? @map("return_confirmed_at")
+  returnConfirmedBy    String?   @map("return_confirmed_by") @db.Uuid
+  student              Student   @relation(fields: [studentId], references: [id])
+  approvedByAdmin      Admin?    @relation("ApprovedOutpass", fields: [approvedBy], references: [id])
+
+  @@map("outpass")
+}
+
+model Document {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String    @map("student_id") @db.Uuid
+  type            String    @db.VarChar(30)
+  label           String?   @db.VarChar(100)
+  fileUrl         String    @map("file_url")
+  fileName        String?   @map("file_name") @db.VarChar(200)
+  fileSize        Int?      @map("file_size")
+  uploadedAt      DateTime  @default(now()) @map("uploaded_at")
+  isVerified      Boolean   @default(false) @map("is_verified")
+  verifiedBy      String?   @map("verified_by") @db.Uuid
+  verifiedAt      DateTime? @map("verified_at")
+  rejectionNote   String?   @map("rejection_note")
+  student         Student   @relation(fields: [studentId], references: [id])
+  verifiedByAdmin Admin?    @relation(fields: [verifiedBy], references: [id])
+
+  @@map("documents")
+}
+
+model Feedback {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  month             Int
+  year              Int
+  foodRating        Int?     @map("food_rating")
+  cleanlinessRating Int?     @map("cleanliness_rating")
+  wifiRating        Int?     @map("wifi_rating")
+  staffRating       Int?     @map("staff_rating")
+  overallRating     Int?     @map("overall_rating")
+  comment           String?
+  submittedAt       DateTime @default(now()) @map("submitted_at")
+  student           Student  @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, month, year])
+  @@map("feedback")
+}
+
+model RoomHistory {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId      String   @map("student_id") @db.Uuid
+  fromRoomId     String?  @map("from_room_id") @db.Uuid
+  fromBedId      String?  @map("from_bed_id") @db.Uuid
+  toRoomId       String   @map("to_room_id") @db.Uuid
+  toBedId        String   @map("to_bed_id") @db.Uuid
+  changedBy      String   @map("changed_by") @db.Uuid
+  changedAt      DateTime @default(now()) @map("changed_at")
+  reason         String?
+  student        Student  @relation(fields: [studentId], references: [id])
+  fromRoom       Room?    @relation("FromRoom", fields: [fromRoomId], references: [id])
+  toRoom         Room     @relation("ToRoom", fields: [toRoomId], references: [id])
+  fromBed        Bed?     @relation("FromBed", fields: [fromBedId], references: [id])
+  toBed          Bed      @relation("ToBed", fields: [toBedId], references: [id])
+  changedByAdmin Admin    @relation(fields: [changedBy], references: [id])
+
+  @@map("room_history")
+}
+
+model RenewalExit {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId           String    @map("student_id") @db.Uuid
+  type                String    @db.VarChar(10)
+  requestDate         DateTime  @default(now()) @map("request_date") @db.Date
+  effectiveDate       DateTime  @map("effective_date") @db.Date
+  newRoomId           String?   @map("new_room_id") @db.Uuid
+  newPackage          String?   @map("new_package") @db.VarChar(20)
+  depositRefundAmount Decimal   @default(0) @map("deposit_refund_amount") @db.Decimal(10, 2)
+  damageAmount        Decimal   @default(0) @map("damage_amount") @db.Decimal(10, 2)
+  finalDues           Decimal   @default(0) @map("final_dues") @db.Decimal(10, 2)
+  inspectionNotes     String?   @map("inspection_notes")
+  status              String    @default("pending") @db.VarChar(20)
+  notes               String?
+  processedBy         String?   @map("processed_by") @db.Uuid
+  processedAt         DateTime? @map("processed_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  student             Student   @relation(fields: [studentId], references: [id])
+  processedByAdmin    Admin?    @relation(fields: [processedBy], references: [id])
+
+  @@map("renewal_exit")
+}
+
+model ActivityLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  actorType  String   @map("actor_type") @db.VarChar(10)
+  action     String   @db.VarChar(50)
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String?  @map("entity_id") @db.Uuid
+  meta       Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at")
+  admin      Admin    @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model WhatsappLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientMobile String   @map("recipient_mobile") @db.VarChar(15)
+  studentId       String?  @map("student_id") @db.Uuid
+  templateName    String   @map("template_name") @db.VarChar(100)
+  messageBody     String   @map("message_body")
+  waMessageId     String?  @map("wa_message_id") @db.VarChar(100)
+  status          String   @default("queued") @db.VarChar(20)
+  errorMessage    String?  @map("error_message")
+  sentAt          DateTime @default(now()) @map("sent_at")
+  student         Student? @relation(fields: [studentId], references: [id])
+
+  @@map("whatsapp_logs")
+}
+
+model Settings {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId           String   @unique @map("branch_id") @db.Uuid
+  lateFeeType        String   @default("flat") @map("late_fee_type") @db.VarChar(20)
+  lateFeeAmount      Decimal  @default(500) @map("late_fee_amount") @db.Decimal(10, 2)
+  gracePeriodDays    Int      @default(7) @map("grace_period_days")
+  depositPolicy      String?  @map("deposit_policy")
+  autoInvoiceEnabled Boolean  @default(true) @map("auto_invoice_enabled")
+  whatsappTemplates  Json     @default("{}") @map("whatsapp_templates")
+  staffPermissions   Json     @default("{}") @map("staff_permissions")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  branch             Branch   @relation(fields: [branchId], references: [id])
+
+  @@map("settings")
+}
+
+model SemesterPeriod {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String    @map("branch_id") @db.Uuid
+  semNumber   Int       @map("sem_number")
+  year        Int
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime  @map("end_date") @db.Date
+  isActive    Boolean   @default(true) @map("is_active")
+  autoOutpass Boolean   @default(false) @map("auto_outpass")
+  createdBy   String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  branch      Branch    @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, semNumber, year])
+  @@map("semester_periods")
+}

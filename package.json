@@ -1,0 +1,23 @@
+{
+  "name": "pg-hostel-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["shared", "backend", "admin-portal", "student-portal"],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "db:generate": "npm run prisma:generate --workspace=backend",
+    "db:push": "npm run prisma:push --workspace=backend",
+    "db:migrate": "npm run prisma:migrate --workspace=backend",
+    "db:seed": "npm run prisma:seed --workspace=backend",
+    "db:studio": "npm run prisma:studio --workspace=backend",
+    "db:test-rls": "npm run test:rls --workspace=backend",
+    "setup": "npm install && npm run db:generate && npm run db:push && npm run db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}

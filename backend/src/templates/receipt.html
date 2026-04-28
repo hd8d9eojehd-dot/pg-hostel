@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; font-size: 13px; color: #1e293b; background: white; padding: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid #4f46e5; }
+  .pg-name { font-size: 22px; font-weight: 700; color: #4f46e5; }
+  .pg-info { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.5; }
+  .receipt-title { font-size: 18px; font-weight: 700; color: #4f46e5; text-align: center; margin: 16px 0; letter-spacing: 2px; }
+  .receipt-num { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 8px 16px; text-align: center; margin-bottom: 16px; }
+  .receipt-num span { font-size: 16px; font-weight: 700; color: #4338ca; font-family: monospace; }
+  .student-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .info-card { background: #f8fafc; border-radius: 8px; padding: 10px 14px; }
+  .info-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+  .info-value { font-size: 13px; font-weight: 500; color: #1e293b; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { background: #4f46e5; color: white; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
+  .amount-row td { font-size: 15px; font-weight: 700; color: #059669; background: #f0fdf4; }
+  .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+  .qr img { width: 80px; height: 80px; }
+  .qr-label { font-size: 9px; color: #94a3b8; text-align: center; margin-top: 4px; }
+  .sign-area { text-align: center; }
+  .sign-line { width: 160px; border-top: 1px solid #1e293b; margin: 0 auto 4px; }
+  .sign-label { font-size: 11px; color: #64748b; }
+  .thank-you { text-align: center; margin-top: 12px; font-size: 13px; color: #64748b; font-style: italic; }
+</style>
+</head>
+<body>
+  <!-- Template variables: {{pgName}}, {{pgAddress}}, {{pgContact}}, {{receiptNumber}}, {{studentName}}, {{studentId}}, {{roomNumber}}, {{bedLabel}}, {{paymentMode}}, {{transactionRef}}, {{amount}}, {{balance}}, {{description}}, {{paidDate}}, {{qrDataUrl}} -->
+  <div class="header">
+    <div>
+      <div class="pg-name">{{pgName}}</div>
+      <div class="pg-info">{{pgAddress}}<br>📞 {{pgContact}}</div>
+    </div>
+    <div style="text-align:right; font-size:11px; color:#64748b;">
+      <div>Date: {{paidDate}}</div>
+    </div>
+  </div>
+  <div class="receipt-title">PAYMENT RECEIPT</div>
+  <div class="receipt-num">Receipt No: <span>{{receiptNumber}}</span></div>
+  <div class="student-row">
+    <div class="info-card"><div class="info-label">Student Name</div><div class="info-value">{{studentName}}</div></div>
+    <div class="info-card"><div class="info-label">Student ID</div><div class="info-value" style="font-family:monospace;">{{studentId}}</div></div>
+    <div class="info-card"><div class="info-label">Room / Bed</div><div class="info-value">Room {{roomNumber}} — Bed {{bedLabel}}</div></div>
+    <div class="info-card"><div class="info-label">Payment Mode</div><div class="info-value">{{paymentMode}}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+    <tbody>
+      <tr><td>{{description}}</td><td style="text-align:right;">₹{{amount}}</td></tr>
+      <tr class="amount-row"><td style="font-weight:600;">Amount Paid</td><td style="text-align:right;">₹{{amount}}</td></tr>
+      <tr><td>Balance Remaining</td><td style="text-align:right;">₹{{balance}}</td></tr>
+    </tbody>
+  </table>
+  <div class="footer">
+    <div class="qr"><img src="{{qrDataUrl}}" alt="QR Code" /><div class="qr-label">Scan to verify</div></div>
+    <div class="sign-area">
+      <div class="sign-line"></div>
+      <div class="sign-label">Authorised Signatory</div>
+      <div class="sign-label" style="margin-top:4px; font-weight:600;">{{pgName}}</div>
+    </div>
+  </div>
+  <div class="thank-you">Thank you for your payment! 🙏</div>
+</body>
+</html>

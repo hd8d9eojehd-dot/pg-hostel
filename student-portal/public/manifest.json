@@ -1,0 +1,23 @@
+{
+    "name":  "My PG",
+    "short_name":  "My PG",
+    "description":  "PG Hostel Student Portal",
+    "start_url":  "/home",
+    "display":  "standalone",
+    "background_color":  "#ffffff",
+    "theme_color":  "#16a34a",
+    "orientation":  "portrait-primary",
+    "icons":  [
+                  {
+                      "purpose":  "any maskable",
+                      "type":  "image/svg+xml",
+                      "sizes":  "192x192",
+                      "src":  "/icon-192.svg"
+                  },
+                  {
+                      "type":  "image/x-icon",
+                      "sizes":  "48x48",
+                      "src":  "/favicon.ico"
+                  }
+              ]
+}

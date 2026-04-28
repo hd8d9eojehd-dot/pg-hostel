@@ -1,0 +1,23 @@
+{
+    "name":  "PG Hostel Admin",
+    "short_name":  "PG Admin",
+    "description":  "PG Hostel Management Admin Portal",
+    "start_url":  "/dashboard",
+    "display":  "standalone",
+    "background_color":  "#ffffff",
+    "theme_color":  "#4f46e5",
+    "orientation":  "portrait-primary",
+    "icons":  [
+                  {
+                      "purpose":  "any maskable",
+                      "type":  "image/svg+xml",
+                      "sizes":  "192x192",
+                      "src":  "/icon-192.svg"
+                  },
+                  {
+                      "type":  "image/x-icon",
+                      "sizes":  "48x48",
+                      "src":  "/favicon.ico"
+                  }
+              ]
+}
