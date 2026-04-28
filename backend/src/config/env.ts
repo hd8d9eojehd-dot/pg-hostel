@@ -40,8 +40,16 @@ if (!_parsed.success) {
   Object.entries(errors).forEach(([key, msgs]) => {
     console.error(`  ${key}: ${msgs?.join(', ')}`)
   })
-  console.error('\nFix the above env vars in your .env file and restart.\n')
-  process.exit(1)
+  console.error('\n❌ ENVIRONMENT VARIABLE VALIDATION FAILED:\n')
+  const errors = _parsed.error.flatten().fieldErrors
+  Object.entries(errors).forEach(([key, msgs]) => {
+    console.error(`  ${key}: ${msgs?.join(', ')}`)
+  })
+  console.error('\nFix the above env vars and redeploy.\n')
+  // Don't exit on Vercel — log and continue with defaults
+  if (process.env['NODE_ENV'] !== 'production') {
+    process.exit(1)
+  }
 }
 
 export const env = _parsed.data
