@@ -40,12 +40,6 @@ async function getApp() {
   server.use(errorMiddleware)
   server.use((_req, res) => res.status(404).json({ success: false, error: 'Route not found' }))
 
-  // Init DB + Cashfree (non-blocking)
-  Promise.all([
-    import('../src/config/prisma').then(m => m.connectPrisma()),
-    import('../src/config/cashfree').then(m => m.initCashfree()),
-  ]).catch(e => console.error('Init error:', (e as Error).message?.substring(0, 100)))
-
   app = server
   return server
 }
@@ -55,8 +49,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const server = await getApp()
     server(req, res)
   } catch (e) {
-    console.error('Handler error:', e)
+    const msg = (e as Error).message || 'Unknown error'
+    console.error('Handler error:', msg)
     res.writeHead(500, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ success: false, error: 'Internal server error' }))
+    res.end(JSON.stringify({ success: false, error: msg.substring(0, 200) }))
   }
 }
