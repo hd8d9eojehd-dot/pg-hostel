@@ -66,7 +66,7 @@ export default function ComplaintDetailPage() {
   return (
     <div>
       <Header title={`Complaint ${complaint.complaintNumber}`} />
-      <div className="p-4 md:p-6 space-y-4 max-w-2xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-2xl mx-auto">
         <Link href="/complaints">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Complaints

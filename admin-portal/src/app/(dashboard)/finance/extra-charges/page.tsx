@@ -44,7 +44,7 @@ export default function ExtraChargesPage() {
   return (
     <div>
       <Header title="Extra Charges" />
-      <div className="p-4 md:p-6 space-y-4 max-w-3xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
         <div className="flex justify-end">
           <Button className="gap-2" onClick={() => setOpen(true)}>
             <Plus className="w-4 h-4" /> Add Charge

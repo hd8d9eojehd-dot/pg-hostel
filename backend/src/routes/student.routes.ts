@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import { requireAdmin } from '../middleware/role.middleware'
-import { requireRole } from '../middleware/role.middleware'
 import { validate } from '../middleware/validate.middleware'
 import {
   CreateStudentSchema, UpdateStudentSchema, ShiftRoomSchema,
@@ -10,6 +9,7 @@ import {
   createStudent, getStudents, getStudentById, updateStudent,
   shiftRoom, extendStay, vacateStudent, downloadIdCard, getStudentStats,
   deleteStudentPermanently, renewStudent, verifyQr,
+  getCourseGroups, bulkAdvanceSemester,
 } from '../controllers/student.controller'
 
 export const studentRouter = Router()
@@ -18,6 +18,8 @@ export const studentRouter = Router()
 studentRouter.get('/verify-qr', verifyQr)
 
 studentRouter.get('/stats', requireAdmin, getStudentStats)
+studentRouter.get('/course-groups', requireAdmin, getCourseGroups)
+studentRouter.post('/bulk-advance-semester', requireAdmin, bulkAdvanceSemester)
 studentRouter.get('/', requireAdmin, getStudents)
 studentRouter.post('/', requireAdmin, validate(CreateStudentSchema), createStudent)
 studentRouter.get('/:id', requireAdmin, getStudentById)

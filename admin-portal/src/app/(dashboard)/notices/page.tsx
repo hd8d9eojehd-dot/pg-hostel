@@ -66,7 +66,7 @@ export default function NoticesPage() {
       <div className="p-4 md:p-6 space-y-4">
 
         {/* Toolbar */}
-        <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex flex-wrap gap-2 items-center justify-between">
           <div className="flex gap-2 flex-wrap">
             <select
               value={category}
@@ -87,7 +87,7 @@ export default function NoticesPage() {
               <option value="false">Drafts</option>
             </select>
           </div>
-          <Link href="/notices/new">
+          <Link href="/notices/new" className="flex-shrink-0">
             <Button className="gap-2"><Plus className="w-4 h-4" /> New Notice</Button>
           </Link>
         </div>

@@ -16,10 +16,67 @@ import api from '@/lib/api'
 import {
   ArrowLeft, User, BedDouble, GraduationCap, Phone,
   IndianRupee, Download, UserX, ArrowRightLeft, CalendarPlus, Loader2, Pencil,
-  AlertTriangle, CheckCircle2, CreditCard, Plus,
+  AlertTriangle, CheckCircle2, CreditCard, Plus, ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAuthStore } from '@/store/auth.store'
+
+// ── Inline semester updater — creates new invoice on change ──
+function SemesterUpdateInline({
+  studentId,
+  currentSem,
+  totalSems,
+  onUpdated,
+}: {
+  studentId: string
+  currentSem: number
+  totalSems: number
+  onUpdated: () => void
+}) {
+  const { toast } = useToast()
+  const [pending, setPending] = useState(false)
+  const [selected, setSelected] = useState(currentSem)
+
+  const handleChange = async (newSem: number) => {
+    if (newSem === currentSem) return
+    setPending(true)
+    try {
+      // Update semester AND create new invoice for the new semester
+      await api.patch(`/students/${studentId}`, {
+        semester: newSem,
+        createInvoiceForNewSem: true, // backend flag to auto-create invoice
+      })
+      setSelected(newSem)
+      onUpdated()
+      toast({ title: `✓ Semester updated to ${newSem} · New invoice created (due)` })
+    } catch (e: unknown) {
+      toast({
+        title: 'Failed to update semester',
+        description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error,
+        variant: 'destructive',
+      })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={selected}
+        disabled={pending}
+        onChange={e => handleChange(Number(e.target.value))}
+        className="h-8 rounded-lg border border-input bg-background px-2 text-xs flex-1 disabled:opacity-50"
+      >
+        {Array.from({ length: totalSems }, (_, i) => i + 1).map(s => (
+          <option key={s} value={s}>Sem {s}</option>
+        ))}
+      </select>
+      <span className="text-xs text-gray-400 flex-shrink-0">of {totalSems}</span>
+      {pending && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary flex-shrink-0" />}
+    </div>
+  )
+}
 
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -49,18 +106,18 @@ export default function StudentDetailPage() {
   const [payOpen, setPayOpen] = useState(false)
   const [payInvoiceId, setPayInvoiceId] = useState('')
   const [payAmount, setPayAmount] = useState('')
-  const [payMode, setPayMode] = useState<'cash' | 'upi' | 'bank_transfer' | 'online'>('cash')
-  const [payRef, setPayRef] = useState('')
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
   const [payLateFee, setPayLateFee] = useState(0)
   const [payNotes, setPayNotes] = useState('')
+  const [payMode, setPayMode] = useState<'cash'>('cash')
+  const [payRef, setPayRef] = useState('')
   const [paySuccess, setPaySuccess] = useState<{ receiptNumber: string; amount: number } | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState('')
   const [deleteStep, setDeleteStep] = useState(1)
   const [vacateForm, setVacateForm] = useState({ vacateDate: '', reason: '', depositRefundAmount: 0, damageAmount: 0, inspectionNotes: '' })
   const [shiftForm, setShiftForm] = useState({ newRoomId: '', newBedId: '', reason: '' })
   const [extendForm, setExtendForm] = useState({ newEndDate: '' })
-  const [renewForm, setRenewForm] = useState({ roomId: '', bedId: '', joiningDate: '', stayDuration: '6months', rentPackage: 'monthly', depositAmount: 5000 })
+  const [renewForm, setRenewForm] = useState({ roomId: '', bedId: '', joiningDate: '', stayDurationMonths: 12, rentPackage: 'monthly', depositAmount: 5000 })
 
   const { data: student, isLoading } = useQuery({
     queryKey: ['student', id],
@@ -83,7 +140,10 @@ export default function StudentDetailPage() {
   })
 
   const renewStudent = useMutation({
-    mutationFn: () => api.post(`/students/${id}/renew`, renewForm),
+    mutationFn: () => api.post(`/students/${id}/renew`, {
+      ...renewForm,
+      stayDuration: `${renewForm.stayDurationMonths}months`,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['student', id] })
       toast({ title: '✓ Student re-admitted successfully' })
@@ -126,7 +186,6 @@ export default function StudentDetailPage() {
   const collectPayment = useMutation({
     mutationFn: async () => {
       const totalWithFee = Number(payAmount) + payLateFee
-      // Add late fee first if any
       if (payLateFee > 0) {
         await api.patch(`/finance/invoices/${payInvoiceId}/add-late-fee`, { lateFee: payLateFee })
       }
@@ -134,10 +193,9 @@ export default function StudentDetailPage() {
         invoiceId: payInvoiceId,
         studentId: id,
         amount: totalWithFee,
-        paymentMode: payMode,
-        transactionRef: payRef || undefined,
+        paymentMode: 'cash',
         paidDate: payDate,
-        notes: payNotes || undefined,
+        notes: payNotes || 'Cash payment collected at counter',
       })
       return res.data.data
     },
@@ -173,7 +231,7 @@ export default function StudentDetailPage() {
   return (
     <div>
       <Header title={student.name} />
-      <div className="p-4 md:p-6 space-y-4 max-w-4xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
 
         {/* Back + actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -182,7 +240,7 @@ export default function StudentDetailPage() {
               <ArrowLeft className="w-4 h-4" /> Students
             </Button>
           </Link>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap justify-end">
             <Link href={`/students/${id}/edit`}>
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Pencil className="w-3.5 h-3.5" /> Edit
@@ -203,14 +261,12 @@ export default function StudentDetailPage() {
                   const firstDue = (student.invoices ?? []).find((i: { status: string }) => ['due', 'overdue', 'partial'].includes(i.status))
                   setPayInvoiceId(firstDue?.id ?? '')
                   setPayAmount(firstDue ? String(Number(firstDue.balance)) : '')
-                  setPayMode('cash')
-                  setPayRef('')
                   setPayLateFee(0)
                   setPayNotes('')
                   setPaySuccess(null)
                   setPayOpen(true)
                 }}>
-                <IndianRupee className="w-3.5 h-3.5" /> Collect Payment
+                <IndianRupee className="w-3.5 h-3.5" /> Collect Cash
               </Button>
             )}
             {student.status === 'vacated' && (
@@ -307,30 +363,15 @@ export default function StudentDetailPage() {
                   <InfoRow label="Course" value={student.course} />
                   <InfoRow label="Branch" value={student.branch} />
                   <InfoRow label="Year / Sem" value={student.yearOfStudy ? `Year ${student.yearOfStudy}, Sem ${student.semester} of ${(student as { totalSemesters?: number }).totalSemesters ?? 8}` : undefined} />
-                  {/* Quick semester update */}
+                  {/* Quick semester update — creates new invoice automatically */}
                   <div className="pt-2 border-t">
                     <p className="text-xs text-gray-500 mb-1.5">Update Current Semester</p>
-                    <div className="flex items-center gap-2">
-                      <select
-                        defaultValue={student.semester ?? 1}
-                        onChange={async (e) => {
-                          const newSem = Number(e.target.value)
-                          try {
-                            await api.patch(`/students/${id}`, { semester: newSem })
-                            qc.invalidateQueries({ queryKey: ['student', id] })
-                            toast({ title: `✓ Semester updated to ${newSem}` })
-                          } catch {
-                            toast({ title: 'Failed to update semester', variant: 'destructive' })
-                          }
-                        }}
-                        className="h-8 rounded-lg border border-input bg-background px-2 text-xs flex-1"
-                      >
-                        {Array.from({ length: (student as { totalSemesters?: number }).totalSemesters ?? 8 }, (_, i) => i + 1).map(s => (
-                          <option key={s} value={s}>Sem {s}</option>
-                        ))}
-                      </select>
-                      <span className="text-xs text-gray-400">of {(student as { totalSemesters?: number }).totalSemesters ?? 8}</span>
-                    </div>
+                    <SemesterUpdateInline
+                      studentId={id}
+                      currentSem={student.semester ?? 1}
+                      totalSems={(student as { totalSemesters?: number }).totalSemesters ?? 8}
+                      onUpdated={() => qc.invalidateQueries({ queryKey: ['student', id] })}
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -420,11 +461,35 @@ export default function StudentDetailPage() {
                               : Number(student.room?.annualRent ?? 0) / 2
 
                           return Array.from({ length: totalSems }, (_, i) => i + 1).map(sem => {
-                            const isPaid = sem < currentSem
                             const isCurrent = sem === currentSem
-                            const semInvoice = (student.invoices ?? []).find((inv: { description?: string; semesterNumber?: number; status: string }) =>
-                              inv.semesterNumber === sem || inv.description?.includes(`Sem ${sem}`) || (isCurrent && ['due','overdue','partial'].includes(inv.status))
-                            )
+                            // Find invoice for this semester — match by semesterNumber, description, or current sem
+                            const semInvoice = (student.invoices ?? []).find((inv: { description?: string; semesterNumber?: number; status: string; invoiceNumber: string }) =>
+                              inv.semesterNumber === sem ||
+                              inv.description?.toLowerCase().includes(`sem ${sem}`) ||
+                              (isCurrent && (student.invoices ?? []).filter((i: { type: string }) => i.type === 'rent').indexOf(inv) === sem - 1)
+                            ) ?? (student.invoices ?? []).filter((i: { type: string }) => i.type === 'rent')[sem - 1]
+
+                            // Determine status: use invoice status if exists, else position-based
+                            let semStatus: string
+                            if (semInvoice) {
+                              semStatus = semInvoice.status // paid/partial/due/overdue
+                            } else if (sem < currentSem) {
+                              semStatus = 'no_record' // no invoice found — don't assume paid
+                            } else if (isCurrent) {
+                              semStatus = 'due'
+                            } else {
+                              semStatus = 'upcoming'
+                            }
+
+                            const statusConfig: Record<string, { label: string; cls: string }> = {
+                              paid: { label: '✓ Paid', cls: 'bg-green-100 text-green-700' },
+                              partial: { label: '◑ Partial', cls: 'bg-orange-100 text-orange-700' },
+                              due: { label: '⏳ Due', cls: 'bg-yellow-100 text-yellow-700' },
+                              overdue: { label: '⚠ Overdue', cls: 'bg-red-100 text-red-700' },
+                              upcoming: { label: 'Upcoming', cls: 'bg-gray-100 text-gray-500' },
+                              no_record: { label: 'No Record', cls: 'bg-gray-100 text-gray-500' },
+                            }
+                            const sc = statusConfig[semStatus] ?? statusConfig['upcoming']
                             return (
                               <tr key={sem} className={`border-b ${isCurrent ? 'bg-blue-50' : ''}`}>
                                 <td className="px-3 py-2">
@@ -433,8 +498,8 @@ export default function StudentDetailPage() {
                                 </td>
                                 <td className="px-3 py-2 text-right font-medium">{formatCurrency(feePerSem)}</td>
                                 <td className="px-3 py-2">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isPaid ? 'bg-green-100 text-green-700' : isCurrent ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
-                                    {isPaid ? '✓ Paid' : isCurrent ? '⏳ Due' : 'Upcoming'}
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.cls}`}>
+                                    {sc.label}
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 hidden md:table-cell text-xs text-gray-400 font-mono">
@@ -764,31 +829,14 @@ export default function StudentDetailPage() {
                 </p>
               )}
 
-              {/* Payment mode */}
+              {/* Payment mode — cash only */}
               <div className="space-y-1.5">
                 <Label>Payment Mode</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'cash', label: '💵 Cash' },
-                    { value: 'upi', label: '📱 UPI' },
-                    { value: 'bank_transfer', label: '🏦 Bank' },
-                  ].map(m => (
-                    <button key={m.value} type="button"
-                      onClick={() => setPayMode(m.value as typeof payMode)}
-                      className={`py-2.5 rounded-xl border-2 text-xs font-semibold transition-colors ${payMode === m.value ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                      {m.label}
-                    </button>
-                  ))}
+                <div className="p-3 rounded-xl border-2 border-primary bg-primary/5 text-center">
+                  <p className="text-sm font-semibold text-primary">💵 Cash</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Cash payment collected at counter</p>
                 </div>
               </div>
-
-              {/* UTR for UPI/bank */}
-              {(payMode === 'upi' || payMode === 'bank_transfer') && (
-                <div className="space-y-1.5">
-                  <Label>UTR / Transaction Reference <span className="text-destructive">*</span></Label>
-                  <Input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="UTR number or transaction ID" />
-                </div>
-              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -804,7 +852,7 @@ export default function StudentDetailPage() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button>
                 <Button className="gap-2 bg-green-600 hover:bg-green-700"
-                  disabled={collectPayment.isPending || !payInvoiceId || !payAmount || Number(payAmount) <= 0 || ((payMode === 'upi' || payMode === 'bank_transfer') && !payRef)}
+                  disabled={collectPayment.isPending || !payInvoiceId || !payAmount || Number(payAmount) <= 0}
                   onClick={() => collectPayment.mutate()}>
                   {collectPayment.isPending
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording...</>
@@ -850,11 +898,16 @@ export default function StudentDetailPage() {
                 <Input type="date" value={renewForm.joiningDate} onChange={e => setRenewForm(f => ({ ...f, joiningDate: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>Stay Duration</Label>
-                <select value={renewForm.stayDuration} onChange={e => setRenewForm(f => ({ ...f, stayDuration: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                  {['3months', '6months', '1year'].map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                <Label>Stay Duration (months)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={renewForm.stayDurationMonths}
+                  onChange={e => setRenewForm(f => ({ ...f, stayDurationMonths: Number(e.target.value) || 12 }))}
+                  placeholder="12"
+                />
+                <p className="text-xs text-gray-400">e.g. 12 = 1 year, 6 = 6 months</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Rent Package</Label>

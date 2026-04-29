@@ -112,14 +112,14 @@ export default function RoomDetailPage() {
   return (
     <div>
       <Header title={`Room ${room.roomNumber}`} />
-      <div className="p-4 md:p-6 space-y-4 max-w-2xl">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-6 space-y-4 max-w-2xl mx-auto">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Link href="/rooms">
             <Button variant="ghost" size="sm" className="gap-1.5">
               <ArrowLeft className="w-4 h-4" /> Rooms
             </Button>
           </Link>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditOpen(true)}>
               <Pencil className="w-3.5 h-3.5" /> Edit Room
             </Button>
@@ -167,7 +167,7 @@ export default function RoomDetailPage() {
             </div>
 
             {/* Rent */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-xl text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-xl text-sm">
               {room.monthlyRent && <div><p className="text-xs text-gray-500">Monthly</p><p className="font-semibold">₹{Number(room.monthlyRent).toLocaleString('en-IN')}</p></div>}
               {room.semesterRent && <div><p className="text-xs text-gray-500">Semester</p><p className="font-semibold">₹{Number(room.semesterRent).toLocaleString('en-IN')}</p></div>}
               {room.annualRent && <div><p className="text-xs text-gray-500">Annual</p><p className="font-semibold">₹{Number(room.annualRent).toLocaleString('en-IN')}</p></div>}
@@ -257,7 +257,7 @@ export default function RoomDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Monthly Rent (₹)</Label>
                 <Input type="number" value={editForm.monthlyRent as number} onChange={e => setEditForm(f => ({ ...f, monthlyRent: Number(e.target.value) }))} />

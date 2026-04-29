@@ -87,7 +87,7 @@ export async function approveOutpass(req: Request, res: Response, next: NextFunc
     const { note } = req.body as ApproveOutpassInput
     const outpass = await prisma.outpass.findUnique({
       where: { id: req.params['id']! },
-      include: { student: { select: { name: true, mobile: true } } },
+      include: { student: { select: { id: true, name: true, studentId: true, mobile: true } } },
     })
     if (!outpass) throw new ApiError(404, 'Outpass not found')
     if (outpass.status !== 'pending') throw new ApiError(400, 'Outpass is not pending')
@@ -98,7 +98,9 @@ export async function approveOutpass(req: Request, res: Response, next: NextFunc
     })
 
     notifyOutpassStatus({
+      studentDbId: outpass.student.id,
       studentName: outpass.student.name,
+      studentId: outpass.student.studentId,
       mobile: outpass.student.mobile,
       fromDate: outpass.fromDate,
       toDate: outpass.toDate,
@@ -117,7 +119,7 @@ export async function rejectOutpass(req: Request, res: Response, next: NextFunct
     const { note } = req.body as RejectOutpassInput
     const outpass = await prisma.outpass.findUnique({
       where: { id: req.params['id']! },
-      include: { student: { select: { name: true, mobile: true } } },
+      include: { student: { select: { id: true, name: true, studentId: true, mobile: true } } },
     })
     if (!outpass) throw new ApiError(404, 'Outpass not found')
     if (outpass.status !== 'pending') throw new ApiError(400, 'Outpass is not pending')
@@ -128,7 +130,9 @@ export async function rejectOutpass(req: Request, res: Response, next: NextFunct
     })
 
     notifyOutpassStatus({
+      studentDbId: outpass.student.id,
       studentName: outpass.student.name,
+      studentId: outpass.student.studentId,
       mobile: outpass.student.mobile,
       fromDate: outpass.fromDate,
       toDate: outpass.toDate,

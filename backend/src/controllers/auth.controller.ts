@@ -43,8 +43,13 @@ export async function studentLogin(req: Request, res: Response, next: NextFuncti
       select: { id: true, email: true, name: true, studentId: true, status: true, isFirstLogin: true },
     })
     if (!student) throw new ApiError(401, 'Invalid Student ID or password')
-    if (student.status === 'vacated' || student.status === 'suspended') {
-      throw new ApiError(403, 'Account is no longer active')
+
+    // Block vacated, suspended, and deleted students
+    if (student.status === 'vacated') {
+      throw new ApiError(403, 'This account has been deactivated. Please contact admin.')
+    }
+    if (student.status === 'suspended') {
+      throw new ApiError(403, 'Account is suspended. Please contact admin.')
     }
 
     const email = student.email ?? `${studentId.toLowerCase()}@pg-hostel.local`
@@ -179,26 +184,37 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
       await storeOtpForMobile(parentMobile, 'password_reset', otp)
     }
 
-    // Send via WhatsApp
-    const { sendWhatsAppMessage } = await import('../config/whatsapp')
-    const msg = `Your OTP for password reset is: *${otp}*\nValid for 5 minutes. Do not share with anyone.`
-    await sendWhatsAppMessage(student.mobile, msg).catch(() => {})
-    if (parentMobile && parentMobile !== student.mobile) {
-      await sendWhatsAppMessage(parentMobile, msg).catch(() => {})
-    }
+    // Send via WhatsApp using proper template
+    const { notifyPasswordResetOtp } = await import('../services/notification.service')
+    // Fetch PG name from student's branch
+    const studentWithBranch = await prisma.student.findUnique({
+      where: { id: student.id },
+      select: { room: { select: { branch: { select: { name: true, contactPrimary: true } } } } },
+    })
+    const pgName = studentWithBranch?.room?.branch?.name ?? process.env['PG_NAME'] ?? 'PG Hostel'
+    const pgContact = studentWithBranch?.room?.branch?.contactPrimary ?? undefined
 
-    // Log OTP in dev mode
-    if (process.env['NODE_ENV'] !== 'production') {
-      const { logger } = await import('../utils/logger')
-      logger.info(`🔑 Password reset OTP for ${studentId}: ${otp}`)
+    // Always log OTP — visible in server logs for admin to relay if WhatsApp is offline
+    const { logger } = await import('../utils/logger')
+    logger.info(`🔑 PASSWORD RESET OTP for ${studentId} (${student.mobile}): ${otp}`)
+
+    await notifyPasswordResetOtp({ mobile: student.mobile, otp, pgName, pgContact }).catch((e) => {
+      logger.warn(`WhatsApp OTP delivery failed for ${student.mobile}: ${(e as Error).message}`)
+    })
+    if (parentMobile && parentMobile !== student.mobile) {
+      await notifyPasswordResetOtp({ mobile: parentMobile, otp, pgName, pgContact }).catch((e) => {
+        logger.warn(`WhatsApp OTP delivery failed for parent ${parentMobile}: ${(e as Error).message}`)
+      })
     }
 
     res.json({
       success: true,
       message: 'OTP sent to registered mobile number(s)',
       maskedMobile: student.mobile.replace(/(\d{2})\d{6}(\d{2})/, '$1******$2'),
-      // Return actual mobile so frontend can use it for reset (no re-entry needed)
+      // Return actual mobile so frontend can pre-fill it (no re-entry needed)
       mobile: student.mobile,
+      // Also return parent mobile if different
+      parentMobile: (parentMobile && parentMobile !== student.mobile) ? parentMobile : undefined,
     })
   } catch (err) { next(err) }
 }

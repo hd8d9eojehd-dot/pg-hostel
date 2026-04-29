@@ -96,7 +96,7 @@ export async function getInvoices(query: {
       orderBy: { createdAt: 'desc' },
       include: {
         student: { select: { name: true, studentId: true, mobile: true } },
-        payments: { orderBy: { createdAt: 'desc' } },
+        payments: { orderBy: { createdAt: 'desc' }, select: { receiptNumber: true, utrVerified: true, utrRejected: true, transactionRef: true } },
       },
     }),
     prisma.invoice.count({ where }),
@@ -151,9 +151,21 @@ export async function getFinanceSummary(branchId?: string) {
 
   const studentFilter = branchId ? { student: { room: { branchId } } } : {}
 
+  // Only count verified/completed payments (not pending UTR)
+  const verifiedFilter = {
+    ...studentFilter,
+    utrRejected: false,
+    OR: [
+      { paymentMode: 'cash' },
+      { paymentMode: 'online' },
+      { paymentMode: 'upi', utrVerified: true },
+      { paymentMode: 'bank_transfer', utrVerified: true },
+    ],
+  }
+
   const [totalCollected, totalPending, thisMonthCollected, overdueCount] = await Promise.all([
     prisma.payment.aggregate({
-      where: studentFilter,
+      where: verifiedFilter,
       _sum: { amount: true },
     }),
     prisma.invoice.aggregate({
@@ -161,7 +173,7 @@ export async function getFinanceSummary(branchId?: string) {
       _sum: { balance: true },
     }),
     prisma.payment.aggregate({
-      where: { ...studentFilter, paidDate: { gte: startOfMonth } },
+      where: { ...verifiedFilter, paidDate: { gte: startOfMonth } },
       _sum: { amount: true },
     }),
     prisma.invoice.count({

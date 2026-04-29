@@ -68,11 +68,11 @@ export default function ReportsPage() {
       <Header title="Reports" />
       <div className="p-4 md:p-6 space-y-6">
 
-        {/* Report tabs */}
-        <div className="flex flex-wrap gap-2">
+        {/* Report tabs — horizontal scroll on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
           {REPORT_TABS.map(({ id, label, icon: Icon, color }) => (
             <Button key={id} variant={activeReport === id ? 'default' : 'outline'} size="sm"
-              className="gap-1.5" onClick={() => setActiveReport(id)}>
+              className="gap-1.5 flex-shrink-0" onClick={() => setActiveReport(id)}>
               <Icon className={`w-3.5 h-3.5 ${activeReport === id ? 'text-white' : color}`} /> {label}
             </Button>
           ))}
@@ -82,11 +82,11 @@ export default function ReportsPage() {
         {activeReport === 'revenue' && (
           <div className="flex gap-3 items-center flex-wrap">
             <select value={month} onChange={e => setMonth(Number(e.target.value))}
-              className="h-9 rounded-lg border border-input bg-background px-3 text-sm">
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm flex-shrink-0">
               {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
             </select>
             <select value={year} onChange={e => setYear(Number(e.target.value))}
-              className="h-9 rounded-lg border border-input bg-background px-3 text-sm">
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm flex-shrink-0">
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>

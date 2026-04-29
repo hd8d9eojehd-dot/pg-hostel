@@ -26,7 +26,7 @@ export async function generateReceiptPdf(data: {
   signatureUrl?: string
   lateFee?: number
 }): Promise<Buffer> {
-  const qr = await qrDataUrl(`${env.RECEIPT_BASE_URL}/verify/${data.receiptNumber}`)
+  const qr = await qrDataUrl(`Receipt: ${data.receiptNumber}`)
 
   const isUpiOrOnline = ['upi', 'bank_transfer', 'online'].includes(data.paymentMode)
   const utrRef = data.utrNumber ?? data.transactionRef

@@ -12,8 +12,8 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
 import {
-  IndianRupee, Download, CreditCard, CheckCircle2, Loader2,
-  Smartphone, Building2, BookOpen, Clock, AlertTriangle, ChevronDown, ChevronUp,
+  Download, CreditCard, CheckCircle2, Loader2,
+  BookOpen, Clock, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api/v1'
@@ -64,15 +64,24 @@ export default function FinancePage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState<'structure' | 'pay' | 'history'>('structure')
   const [payingRow, setPayingRow] = useState<{ invoiceId: string; balance: number; label: string; semNumber?: number } | null>(null)
-  const [payMode, setPayMode] = useState<'online' | 'upi'>('online')
   const [customAmount, setCustomAmount] = useState('')
+  const [amountError, setAmountError] = useState('')
+  const [payMode, setPayMode] = useState<'upi' | 'online'>('online')
   const [utrRef, setUtrRef] = useState('')
   const [submittingUpi, setSubmittingUpi] = useState(false)
   const [expandedSem, setExpandedSem] = useState<number | null>(null)
+  const [requestSubmitted, setRequestSubmitted] = useState(false)
 
   const { data: feeData, isLoading } = useQuery<FeeData>({
     queryKey: ['fee-structure'],
     queryFn: () => api.get('/portal/fee-structure').then(r => r.data.data),
+  })
+
+  // Fetch UPI/Bank payment details from admin settings
+  const { data: paymentDetails } = useQuery<Record<string, string> | null>({
+    queryKey: ['payment-details'],
+    queryFn: () => api.get('/portal/payment-details').then(r => r.data.data),
+    staleTime: 5 * 60_000,
   })
 
   // Live UTR payment status — polls every 10s
@@ -87,9 +96,8 @@ export default function FinancePage() {
     !p.utrVerified && !p.utrRejected && p.notes?.includes('PENDING_VERIFICATION')
   )
   const rejectedUtrs = (myPayments ?? []).filter((p: { utrRejected: boolean }) => p.utrRejected)
-  const verifiedUtrs = (myPayments ?? []).filter((p: { utrVerified: boolean }) => p.utrVerified)
 
-  // Online payment via Cashfree
+  // Online payment via Cashfree — only available after admin approves payment request
   const initiateOnline = useMutation({
     mutationFn: async () => {
       if (!payingRow) throw new Error('No invoice selected')
@@ -97,7 +105,6 @@ export default function FinancePage() {
 
       // If no invoiceId (current sem without invoice), create invoice first via payment-request
       if (!payingRow.invoiceId && payingRow.semNumber) {
-        // For online payment, we need an invoice first — create it via a special endpoint
         const createRes = await api.post('/portal/create-sem-invoice', {
           semNumber: payingRow.semNumber,
           amount: parseFloat(customAmount) || payingRow.balance,
@@ -138,7 +145,7 @@ export default function FinancePage() {
     const amt = parseFloat(customAmount) || payingRow.balance
     if (!utrRef.trim()) { toast({ title: 'Enter UTR / Transaction ID', variant: 'destructive' }); return }
     if (amt <= 0) { toast({ title: 'Invalid amount', variant: 'destructive' }); return }
-    if (payingRow.balance > 0 && amt > payingRow.balance + 0.01) { toast({ title: `Amount cannot exceed balance ₹${payingRow.balance}`, variant: 'destructive' }); return }
+    if (amountError) { toast({ title: amountError, variant: 'destructive' }); return }
     setSubmittingUpi(true)
     try {
       const payload: Record<string, unknown> = {
@@ -146,21 +153,19 @@ export default function FinancePage() {
         transactionRef: utrRef.trim(),
         paymentMode: 'upi',
       }
-      if (payingRow.invoiceId) {
-        payload['invoiceId'] = payingRow.invoiceId
-      } else if (payingRow.semNumber) {
-        payload['semNumber'] = payingRow.semNumber
-      }
-      const res = await api.post('/portal/payment-request', payload)
-      toast({ title: '✓ Payment submitted', description: 'Admin will verify within 24 hours' })
+      if (payingRow.invoiceId) payload['invoiceId'] = payingRow.invoiceId
+      else if (payingRow.semNumber) payload['semNumber'] = payingRow.semNumber
+      await api.post('/portal/payment-request', payload)
+      toast({ title: '✓ UTR submitted', description: 'Admin will verify within 24 hours' })
       qc.invalidateQueries({ queryKey: ['fee-structure'] })
-      closePayModal()
+      qc.invalidateQueries({ queryKey: ['my-payments'] })
+      setRequestSubmitted(true)
     } catch (e: unknown) {
       toast({ title: (e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed', variant: 'destructive' })
     } finally { setSubmittingUpi(false) }
   }
 
-  const closePayModal = () => { setPayingRow(null); setUtrRef(''); setCustomAmount('') }
+  const closePayModal = () => { setPayingRow(null); setCustomAmount(''); setRequestSubmitted(false); setUtrRef(''); setAmountError(''); setPayMode('online') }
 
   const openPay = (invoiceId: string | null, balance: number, label: string, semNum?: number) => {
     setPayingRow({ invoiceId: invoiceId ?? '', balance, label, semNumber: semNum })
@@ -197,23 +202,23 @@ export default function FinancePage() {
   return (
     <div>
       <TopBar title="Finance" />
-      <div className="max-w-lg mx-auto pb-24">
+      <div className="max-w-lg mx-auto">{/* bottom padding handled by portal layout */}
 
         {/* Summary banner */}
         <div className={`mx-4 mt-4 rounded-2xl p-4 ${summary.totalDue > 0 ? 'bg-gradient-to-r from-red-500 to-orange-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'}`}>
           <p className="text-white/80 text-xs font-medium uppercase tracking-wide">Total Outstanding</p>
-          <p className="text-white text-3xl font-bold mt-0.5">{formatCurrency(summary.totalDue)}</p>
-          <div className="flex items-center gap-4 mt-3">
+          <p className="text-white text-2xl sm:text-3xl font-bold mt-0.5">{formatCurrency(summary.totalDue)}</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
             <div>
               <p className="text-white/70 text-xs">Total Course Fee</p>
               <p className="text-white font-semibold text-sm">{formatCurrency(summary.totalCourseFee)}</p>
             </div>
-            <div className="w-px h-8 bg-white/30" />
+            <div className="w-px h-6 bg-white/30 hidden sm:block" />
             <div>
               <p className="text-white/70 text-xs">Paid So Far</p>
               <p className="text-white font-semibold text-sm">{formatCurrency(summary.totalPaid)}</p>
             </div>
-            <div className="w-px h-8 bg-white/30" />
+            <div className="w-px h-6 bg-white/30 hidden sm:block" />
             <div>
               <p className="text-white/70 text-xs">Deposit</p>
               <p className="text-white font-semibold text-sm">{formatCurrency(summary.depositAmount)}</p>
@@ -485,62 +490,142 @@ export default function FinancePage() {
                       <CardTitle className="text-sm">Pay: {payingRow.label}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* Amount */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Amount to Pay (₹)</Label>
-                        <Input type="number" value={customAmount}
-                          onChange={e => setCustomAmount(e.target.value)}
-                          min={1} max={payingRow.balance}
-                          placeholder={String(payingRow.balance)} />
-                        {parseFloat(customAmount) > 0 && parseFloat(customAmount) < payingRow.balance && (
-                          <p className="text-xs text-yellow-600">
-                            Partial — {formatCurrency(payingRow.balance - parseFloat(customAmount))} will remain due
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Mode selector */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => setPayMode('online')}
-                          className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'online' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                          <CreditCard className="w-5 h-5 mx-auto mb-1 text-primary" />
-                          <p className="text-xs font-semibold">Online</p>
-                          <p className="text-xs text-gray-400">Card / UPI / Net Banking</p>
-                        </button>
-                        <button onClick={() => setPayMode('upi')}
-                          className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'upi' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                          <Smartphone className="w-5 h-5 mx-auto mb-1 text-primary" />
-                          <p className="text-xs font-semibold">UPI / Bank Transfer</p>
-                          <p className="text-xs text-gray-400">Submit UTR for verification</p>
-                        </button>
-                      </div>
-
-                      {payMode === 'online' && (
-                        <Button className="w-full gap-2" disabled={initiateOnline.isPending}
-                          onClick={() => initiateOnline.mutate()}>
-                          {initiateOnline.isPending
-                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to gateway...</>
-                            : <><CreditCard className="w-4 h-4" /> Pay {formatCurrency(parseFloat(customAmount) || payingRow.balance)} Online</>}
-                        </Button>
-                      )}
-
-                      {payMode === 'upi' && (
-                        <div className="space-y-3">
-                          <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700 space-y-1">
-                            <p className="font-semibold flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Transfer to hostel UPI / Bank account</p>
-                            <p>After completing the transfer, enter your UTR or transaction reference below. Admin will verify and confirm within 24 hours.</p>
+                      {requestSubmitted ? (
+                        <div className="text-center py-4 space-y-3">
+                          <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto" />
+                          <div>
+                            <p className="font-semibold text-green-700">Payment Submitted!</p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {payMode === 'upi'
+                                ? 'UTR submitted. Admin will verify within 24 hours.'
+                                : 'Payment request sent. Admin will approve and notify you via WhatsApp.'}
+                            </p>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">UTR / Transaction Reference <span className="text-destructive">*</span></Label>
-                            <Input value={utrRef} onChange={e => setUtrRef(e.target.value)}
-                              placeholder="e.g. 123456789012 or UPI ref" />
-                          </div>
-                          <Button className="w-full gap-2" disabled={submittingUpi || !utrRef.trim()} onClick={submitUpi}>
-                            {submittingUpi
-                              ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</>
-                              : 'Submit Payment for Verification'}
-                          </Button>
+                          <Button variant="outline" className="w-full" onClick={closePayModal}>Close</Button>
                         </div>
+                      ) : (
+                        <>
+                          {/* Amount with validation */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Amount to Pay (Rs.) <span className="text-destructive">*</span></Label>
+                            <Input type="number" value={customAmount}
+                              onChange={e => {
+                                const val = e.target.value
+                                setCustomAmount(val)
+                                const amt = parseFloat(val)
+                                const isLastSem = payingRow.semNumber !== undefined
+                                  && d.student.totalSems > 0
+                                  && payingRow.semNumber >= d.student.totalSems
+                                if (amt > payingRow.balance + 0.01 && isLastSem) {
+                                  setAmountError(`Last semester - please pay exact amount Rs.${payingRow.balance.toLocaleString('en-IN')}`)
+                                } else if (amt <= 0) {
+                                  setAmountError('Amount must be greater than 0')
+                                } else {
+                                  setAmountError('')
+                                }
+                              }}
+                              min={1}
+                              placeholder={String(payingRow.balance)} />
+                            {amountError && <p className="text-xs text-red-500">{amountError}</p>}
+                            {!amountError && parseFloat(customAmount) > 0 && parseFloat(customAmount) < payingRow.balance - 0.01 && (
+                              <p className="text-xs text-yellow-600">
+                                Partial payment - Rs.{(payingRow.balance - parseFloat(customAmount)).toLocaleString('en-IN')} will remain due. Admin must approve partial payments.
+                              </p>
+                            )}
+                            {!amountError && parseFloat(customAmount) > payingRow.balance + 0.01 && (() => {
+                              const isLastSem = payingRow.semNumber !== undefined
+                                && d.student.totalSems > 0
+                                && payingRow.semNumber >= d.student.totalSems
+                              const excess = parseFloat(customAmount) - payingRow.balance
+                              return !isLastSem ? (
+                                <p className="text-xs text-blue-600">
+                                  Excess Rs.{excess.toLocaleString('en-IN')} will be credited to next semester.
+                                </p>
+                              ) : null
+                            })()}
+                          </div>
+
+                          {/* Payment mode selector */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => setPayMode('upi')}
+                              className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'upi' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                              <p className="text-xs font-semibold">📱 UPI / Bank Transfer</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">Submit UTR for verification</p>
+                            </button>
+                            <button onClick={() => setPayMode('online')}
+                              className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'online' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                              <p className="text-xs font-semibold">🌐 Online (Cashfree)</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">Card / UPI / Net Banking</p>
+                            </button>
+                          </div>
+
+                          {/* UPI details from admin settings */}
+                          {payMode === 'upi' && (
+                            <div className="space-y-3">
+                              {paymentDetails && (paymentDetails.upiId || paymentDetails.upiQrUrl || paymentDetails.bankAccountNumber) ? (
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                                  <p className="text-xs font-semibold text-blue-800">Transfer to:</p>
+                                  {paymentDetails.upiQrUrl && (
+                                    <div className="flex justify-center">
+                                      <img src={paymentDetails.upiQrUrl} alt="UPI QR" className="w-32 h-32 rounded-lg border" />
+                                    </div>
+                                  )}
+                                  {paymentDetails.upiId && (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs text-blue-700">UPI ID:</span>
+                                      <span className="text-xs font-mono font-bold text-blue-900">{paymentDetails.upiId}</span>
+                                    </div>
+                                  )}
+                                  {paymentDetails.bankAccountNumber && (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs text-blue-700">Account:</span>
+                                        <span className="text-xs font-mono font-bold text-blue-900">{paymentDetails.bankAccountNumber}</span>
+                                      </div>
+                                      {paymentDetails.bankIfsc && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs text-blue-700">IFSC:</span>
+                                          <span className="text-xs font-mono font-bold text-blue-900">{paymentDetails.bankIfsc}</span>
+                                        </div>
+                                      )}
+                                      {paymentDetails.bankName && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs text-blue-700">Bank:</span>
+                                          <span className="text-xs font-bold text-blue-900">{paymentDetails.bankName}</span>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  <p className="text-[10px] text-blue-600">Transfer ₹{formatCurrency(parseFloat(customAmount) || payingRow.balance)} and enter UTR below</p>
+                                </div>
+                              ) : (
+                                <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
+                                  Contact admin for UPI/Bank details
+                                </div>
+                              )}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">UTR / Transaction Reference <span className="text-destructive">*</span></Label>
+                                <Input value={utrRef} onChange={e => setUtrRef(e.target.value)}
+                                  placeholder="e.g. 123456789012 or UPI ref" />
+                              </div>
+                              <Button className="w-full gap-2" disabled={submittingUpi || !utrRef.trim() || !!amountError}
+                                onClick={submitUpi}>
+                                {submittingUpi
+                                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</>
+                                  : 'Submit UTR for Verification'}
+                              </Button>
+                            </div>
+                          )}
+
+                          {payMode === 'online' && (
+                            <Button className="w-full gap-2" disabled={initiateOnline.isPending || !!amountError}
+                              onClick={() => initiateOnline.mutate()}>
+                              {initiateOnline.isPending
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to gateway...</>
+                                : <><CreditCard className="w-4 h-4" /> Pay {formatCurrency(parseFloat(customAmount) || payingRow.balance)} Online</>}
+                            </Button>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>

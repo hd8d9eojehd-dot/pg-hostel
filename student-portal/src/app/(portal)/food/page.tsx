@@ -74,7 +74,7 @@ export default function FoodPage() {
   return (
     <div>
       <TopBar title="Food Menu" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
 
         {/* Toggle */}
         <div className="flex bg-gray-100 rounded-xl p-1">

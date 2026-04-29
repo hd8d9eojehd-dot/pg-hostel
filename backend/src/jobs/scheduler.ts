@@ -4,14 +4,21 @@ import { runRentReminders } from './rentReminder.job'
 import { runInvoiceStatusUpdate } from './invoiceStatus.job'
 import { runStayExpiryAlerts } from './stayExpiry.job'
 import { runMonthlyInvoiceGeneration } from './monthlyInvoice.job'
+import { runDuePaymentNotifications } from './dueNotification.job'
 
 export function registerAllJobs(): void {
-  // Daily 9:00 AM IST
+  // Daily 9:00 AM IST — rent reminders + invoice status
   cron.schedule('0 9 * * *', async () => {
-    logger.info('⏰ Running daily jobs...')
+    logger.info('⏰ Running daily morning jobs...')
     await runRentReminders().catch(e => logger.error('rentReminders failed:', e))
     await runInvoiceStatusUpdate().catch(e => logger.error('invoiceStatus failed:', e))
     await runStayExpiryAlerts().catch(e => logger.error('stayExpiry failed:', e))
+  }, { timezone: 'Asia/Kolkata' })
+
+  // Daily 6:00 PM IST — due payment notifications to students
+  cron.schedule('0 18 * * *', async () => {
+    logger.info('🔔 Running evening due payment notifications...')
+    await runDuePaymentNotifications().catch(e => logger.error('dueNotifications failed:', e))
   }, { timezone: 'Asia/Kolkata' })
 
   // Monthly: 1st of each month at 8:00 AM IST

@@ -27,7 +27,7 @@ export default function OutpassDetailPage() {
   return (
     <div>
       <TopBar title="Outpass Details" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
         <Link href="/outpass">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Outpass

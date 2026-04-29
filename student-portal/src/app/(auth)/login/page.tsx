@@ -43,19 +43,19 @@ export default function StudentLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50 p-4">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50 p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-4 shadow-lg shadow-primary/30">
-            <GraduationCap className="w-8 h-8 text-white" />
+        <div className="text-center mb-6 md:mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 bg-primary rounded-2xl mb-3 md:mb-4 shadow-lg shadow-primary/30">
+            <GraduationCap className="w-7 h-7 md:w-8 md:h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">My PG</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">My PG</h1>
           <p className="text-gray-500 mt-1 text-sm">Student Portal</p>
         </div>
 
         <Card className="shadow-xl border-0">
-          <CardContent className="p-6">
+          <CardContent className="p-5 md:p-6">
             <h2 className="text-lg font-semibold mb-1">Sign in</h2>
             <p className="text-xs text-gray-500 mb-5">
               Use the Student ID and password provided by your hostel admin.
@@ -67,9 +67,10 @@ export default function StudentLoginPage() {
                 <Input
                   id="studentId"
                   placeholder="PG-2026-0001"
-                  {...register('studentId')}
-                  className={errors.studentId ? 'border-destructive' : ''}
+                  autoComplete="username"
                   autoCapitalize="characters"
+                  {...register('studentId')}
+                  className={`h-11 ${errors.studentId ? 'border-destructive' : ''}`}
                 />
                 {errors.studentId && (
                   <p className="text-xs text-destructive">{errors.studentId.message}</p>
@@ -82,14 +83,16 @@ export default function StudentLoginPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     placeholder="Enter your password"
                     {...register('password')}
-                    className={`pr-10 ${errors.password ? 'border-destructive' : ''}`}
+                    className={`h-11 pr-10 ${errors.password ? 'border-destructive' : ''}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -112,7 +115,7 @@ export default function StudentLoginPage() {
               <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-blue-700">
                 <p className="font-medium">First time logging in?</p>
-                <p className="mt-0.5">Your Student ID and temporary password were sent via WhatsApp when you were admitted. Contact your hostel admin if you haven't received them.</p>
+                <p className="mt-0.5">Your Student ID and password were sent via WhatsApp when you were admitted. Contact your hostel admin if you haven&apos;t received them.</p>
               </div>
             </div>
 

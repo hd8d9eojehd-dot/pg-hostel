@@ -54,7 +54,7 @@ export default function OutpassDetailPage() {
   return (
     <div>
       <Header title={`Outpass ${outpass.outpassNumber}`} />
-      <div className="p-4 md:p-6 space-y-4 max-w-xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-xl mx-auto">
         <Link href="/outpass">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Outpass

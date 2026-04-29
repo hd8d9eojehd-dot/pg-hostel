@@ -2,7 +2,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { RecordPaymentSchema, type RecordPaymentInput, PAYMENT_MODE } from '@pg-hostel/shared'
+import { RecordPaymentSchema, type RecordPaymentInput } from '@pg-hostel/shared'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -50,7 +50,6 @@ function RecordPaymentForm() {
     },
   })
 
-  const paymentMode = watch('paymentMode')
   const amountPaid = watch('amount')
   const remaining = totalWithLateFee - (amountPaid ?? 0)
 
@@ -73,7 +72,7 @@ function RecordPaymentForm() {
   return (
     <div>
       <Header title="Record Payment" />
-      <div className="p-4 md:p-6 max-w-xl">
+      <div className="p-4 md:p-6 max-w-xl mx-auto">
         <Link href="/finance">
           <Button variant="ghost" size="sm" className="gap-1.5 mb-4"><ArrowLeft className="w-4 h-4" /> Finance</Button>
         </Link>
@@ -131,26 +130,25 @@ function RecordPaymentForm() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Payment Mode <span className="text-destructive">*</span></Label>
-                <select {...register('paymentMode')} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                  {PAYMENT_MODE.map(m => <option key={m} value={m}>{m.replace('_', ' ').toUpperCase()}</option>)}
-                </select>
+                <Label>Payment Mode</Label>
+                <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                      <span className="text-lg">💵</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">Cash Payment</p>
+                      <p className="text-xs text-green-600">Collect cash at counter — receipt generated instantly</p>
+                    </div>
+                  </div>
+                </div>
+                <input type="hidden" {...register('paymentMode')} value="cash" />
               </div>
 
-              {(paymentMode === 'upi' || paymentMode === 'bank_transfer' || paymentMode === 'online') && (
-                <div className="space-y-1.5">
-                  <Label>UTR / Transaction Reference <span className="text-destructive">*</span></Label>
-                  <Input {...register('transactionRef')} placeholder="UTR number or transaction ID" />
-                  <p className="text-xs text-gray-400">Required for UPI/Bank/Online payments</p>
-                </div>
-              )}
-
-              {paymentMode === 'cash' && (
-                <div className="space-y-1.5">
-                  <Label>Reference (optional)</Label>
-                  <Input {...register('transactionRef')} placeholder="Cash receipt note..." />
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <Label>Cash Reference (optional)</Label>
+                <Input {...register('transactionRef')} placeholder="e.g. Cash receipt note, voucher no..." />
+              </div>
 
               <div className="space-y-1.5">
                 <Label>Payment Date <span className="text-destructive">*</span></Label>

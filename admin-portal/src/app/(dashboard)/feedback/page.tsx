@@ -60,7 +60,7 @@ export default function FeedbackPage() {
 
         {/* Controls */}
         <div className="flex items-center gap-3 flex-wrap justify-between">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <select value={month} onChange={e => setMonth(Number(e.target.value))} className="h-9 rounded-lg border border-input bg-background px-3 text-sm">
               {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
             </select>
@@ -68,7 +68,7 @@ export default function FeedbackPage() {
               {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-shrink-0">
             <Button variant={tab === 'summary' ? 'default' : 'outline'} size="sm" onClick={() => setTab('summary')}>Summary</Button>
             <Button variant={tab === 'responses' ? 'default' : 'outline'} size="sm" onClick={() => setTab('responses')}>
               <Users className="w-3.5 h-3.5 mr-1.5" /> Responses

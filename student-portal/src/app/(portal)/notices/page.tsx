@@ -23,7 +23,7 @@ export default function NoticesPage() {
   return (
     <div>
       <TopBar title="Notices" />
-      <div className="p-4 space-y-3 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-3 max-w-lg mx-auto">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}><CardContent className="p-4"><div className="h-16 bg-gray-100 rounded animate-pulse" /></CardContent></Card>

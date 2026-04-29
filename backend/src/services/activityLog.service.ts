@@ -32,15 +32,23 @@ export async function getActivityLogs(query: {
   actorId?: string
   entityType?: string
   action?: string
+  startDate?: string
+  endDate?: string
 }) {
   const page = Math.max(1, query.page ?? 1)
-  const limit = Math.min(100, query.limit ?? 20)
+  const limit = Math.min(100, query.limit ?? 50)
   const skip = (page - 1) * limit
 
   const where: Record<string, unknown> = {}
   if (query.actorId) where['actorId'] = query.actorId
   if (query.entityType) where['entityType'] = query.entityType
   if (query.action) where['action'] = query.action
+  if (query.startDate || query.endDate) {
+    where['createdAt'] = {
+      ...(query.startDate ? { gte: new Date(query.startDate) } : {}),
+      ...(query.endDate ? { lte: new Date(query.endDate + 'T23:59:59.999Z') } : {}),
+    }
+  }
 
   const [logs, total] = await Promise.all([
     prisma.activityLog.findMany({
@@ -49,7 +57,7 @@ export async function getActivityLogs(query: {
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        admin: { select: { name: true, role: true } },
+        admin: { select: { name: true, email: true, role: true } },
       },
     }),
     prisma.activityLog.count({ where }),

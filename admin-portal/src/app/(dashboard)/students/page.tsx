@@ -47,37 +47,41 @@ export default function StudentsPage() {
   return (
     <div>
       <Header title="Students" />
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
-              placeholder="Search by name, ID, mobile, college..."
+              placeholder="Search name, ID, mobile..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }}
-              className="pl-9"
+              className="pl-9 h-10"
             />
           </div>
-          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}
-            className="h-10 rounded-lg border border-input bg-background px-3 text-sm">
-            {STATUS_OPTIONS.map(s => (
-              <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All Status'}</option>
-            ))}
-          </select>
-          <select value={feeFilter} onChange={e => { setFeeFilter(e.target.value); setPage(1) }}
-            className="h-10 rounded-lg border border-input bg-background px-3 text-sm">
-            {FEE_STATUS_OPTIONS.map(s => (
-              <option key={s} value={s}>{s ? `Fee: ${s.charAt(0).toUpperCase() + s.slice(1)}` : 'All Fee Status'}</option>
-            ))}
-          </select>
-          <Link href="/students/new">
-            <Button className="gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Admit Student</Button>
-          </Link>
-          <Link href="/students/renewals">
-            <Button variant="outline" className="gap-2 w-full sm:w-auto">Renewals & Exits</Button>
-          </Link>
+          <div className="flex gap-2 flex-wrap">
+            <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}
+              className="h-10 rounded-lg border border-input bg-background px-3 text-sm flex-1 min-w-[120px]">
+              {STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All Status'}</option>
+              ))}
+            </select>
+            <select value={feeFilter} onChange={e => { setFeeFilter(e.target.value); setPage(1) }}
+              className="h-10 rounded-lg border border-input bg-background px-3 text-sm flex-1 min-w-[130px]">
+              {FEE_STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s ? `Fee: ${s.charAt(0).toUpperCase() + s.slice(1)}` : 'All Fee Status'}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/students/new" className="flex-1 sm:flex-none">
+              <Button className="gap-2 w-full sm:w-auto h-10"><Plus className="w-4 h-4" /> Admit Student</Button>
+            </Link>
+            <Link href="/students/renewals" className="flex-1 sm:flex-none">
+              <Button variant="outline" className="gap-2 w-full sm:w-auto h-10">Renewals</Button>
+            </Link>
+          </div>
         </div>
 
         {/* Stats bar */}

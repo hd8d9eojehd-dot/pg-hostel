@@ -45,7 +45,7 @@ export default function OutpassPage() {
   return (
     <div>
       <TopBar title="Outpass" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
 
         <Button onClick={() => setShowForm(!showForm)} className="w-full gap-2" variant={showForm ? 'outline' : 'default'}>
           {showForm ? <><X className="w-4 h-4" /> Cancel</> : <><Plus className="w-4 h-4" /> Request Outpass</>}
@@ -61,7 +61,7 @@ export default function OutpassPage() {
                 {/* Type selector */}
                 <div className="space-y-1.5">
                   <Label>Type</Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[
                       { value: 'outpass', label: '🚶 Outpass', desc: 'Same day' },
                       { value: 'leave', label: '🏠 Leave', desc: 'Overnight' },

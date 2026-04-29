@@ -11,7 +11,6 @@ interface TopBarProps {
 export function TopBar({ title }: TopBarProps) {
   const { user } = useAuthStore()
 
-  // Fetch PG name dynamically — cached for 60s
   const { data: branch } = useQuery({
     queryKey: ['portal-branch'],
     queryFn: () => api.get('/portal/home').then(r => r.data.data?.branch),
@@ -19,7 +18,6 @@ export function TopBar({ title }: TopBarProps) {
     retry: false,
   })
 
-  // Fetch profile for avatar — cached for 5 min
   const { data: profile } = useQuery({
     queryKey: ['my-profile'],
     queryFn: () => api.get('/portal/profile').then(r => r.data.data),
@@ -32,19 +30,28 @@ export function TopBar({ title }: TopBarProps) {
   const initials = user?.name?.charAt(0).toUpperCase() ?? '?'
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
-      <div>
+    <header
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b px-4 flex items-center justify-between"
+      style={{
+        paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0.75rem))',
+        paddingBottom: '0.75rem',
+      }}
+    >
+      <div className="min-w-0 flex-1 mr-3">
         {title ? (
-          <h1 className="font-semibold text-gray-900">{title}</h1>
+          <h1 className="font-semibold text-gray-900 text-base truncate">{title}</h1>
         ) : (
           <>
-            <p className="text-xs text-gray-500">{pgName}</p>
-            <h1 className="font-semibold text-gray-900">{user?.name}</h1>
+            <p className="text-xs text-gray-500 truncate">{pgName}</p>
+            <h1 className="font-semibold text-gray-900 text-base truncate">{user?.name}</h1>
           </>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <button className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
+          aria-label="Notifications"
+        >
           <Bell className="w-5 h-5 text-gray-600" />
         </button>
         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-primary/10 flex items-center justify-center">
@@ -54,7 +61,6 @@ export function TopBar({ title }: TopBarProps) {
               alt={user?.name ?? 'Profile'}
               className="w-full h-full object-cover"
               onError={(e) => {
-                // Fallback to initials on image error
                 const target = e.currentTarget
                 target.style.display = 'none'
                 const parent = target.parentElement

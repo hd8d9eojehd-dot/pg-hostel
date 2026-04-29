@@ -1,8 +1,13 @@
-import { Request, Response, NextFunction } from 'express'
+﻿import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/error.middleware'
+import {
+  notifyUtrSubmittedAdmin,
+  notifyOnlinePaymentRequest,
+} from '../services/notification.service'
+import { env } from '../config/env'
 
-// Student portal — get home page data (all in one call for performance)
+// Student portal â€” get home page data (all in one call for performance)
 export async function getHomeData(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id
@@ -54,7 +59,7 @@ export async function getHomeData(req: Request, res: Response, next: NextFunctio
   } catch (err) { next(err) }
 }
 
-// Student portal — get own profile
+// Student portal â€” get own profile
 export async function getMyProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const student = await prisma.student.findUnique({
@@ -72,7 +77,7 @@ export async function getMyProfile(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// Student portal — get own invoices
+// Student portal â€” get own invoices
 export async function getMyInvoices(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const invoices = await prisma.invoice.findMany({
@@ -86,7 +91,7 @@ export async function getMyInvoices(req: Request, res: Response, next: NextFunct
   }
 }
 
-// Student portal — get own complaints
+// Student portal â€” get own complaints
 export async function getMyComplaints(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const complaints = await prisma.complaint.findMany({
@@ -100,7 +105,7 @@ export async function getMyComplaints(req: Request, res: Response, next: NextFun
   }
 }
 
-// Student portal — get own outpasses
+// Student portal â€” get own outpasses
 export async function getMyOutpasses(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const outpasses = await prisma.outpass.findMany({
@@ -113,7 +118,7 @@ export async function getMyOutpasses(req: Request, res: Response, next: NextFunc
   }
 }
 
-// Student portal — get notices
+// Student portal â€” get notices
 export async function getPublishedNotices(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const notices = await prisma.notice.findMany({
@@ -127,7 +132,7 @@ export async function getPublishedNotices(_req: Request, res: Response, next: Ne
   }
 }
 
-// Student portal — get today's food menu
+// Student portal â€” get today's food menu
 export async function getMyFoodMenu(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const student = await prisma.student.findUnique({
@@ -172,7 +177,7 @@ export async function getMyFoodMenu(req: Request, res: Response, next: NextFunct
   }
 }
 
-// Parent portal — get child info
+// Parent portal â€” get child info
 export async function getChildInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const parent = await prisma.parent.findUnique({
@@ -194,7 +199,7 @@ export async function getChildInfo(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// Student portal — get full fee structure (all semesters)
+// Student portal â€” get full fee structure (all semesters)
 export async function getMyFeeStructure(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id
@@ -202,9 +207,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     const student = await prisma.student.findUnique({
       where: { id: studentId },
       include: {
-        room: {
-          include: { branch: true },
-        },
+        room: { include: { branch: true } },
         invoices: {
           include: { payments: { orderBy: { createdAt: 'desc' } } },
           orderBy: { createdAt: 'asc' },
@@ -217,6 +220,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     const totalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
     const currentSem = student.semester ?? 1
     const rentPackage = student.rentPackage
+    const depositAmount = Number(student.depositAmount ?? 5000)
 
     // Fee per semester based on rent package
     let feePerSem = 0
@@ -224,40 +228,44 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     else if (rentPackage === 'monthly') feePerSem = Number(room?.monthlyRent ?? 0) * 6
     else if (rentPackage === 'annual') feePerSem = Number(room?.annualRent ?? 0) / 2
 
-    // Map invoices to semesters (by semesterNumber if set, else by order)
+    // Sem 1 always includes deposit
+    const sem1Total = feePerSem + depositAmount
+
+    // Map invoices to semesters by semesterNumber
     const rentInvoices = student.invoices.filter(i => i.type === 'rent')
 
     // Build semester rows
     const semesters = Array.from({ length: totalSems }, (_, i) => {
       const sem = i + 1
-      // Find invoice for this semester
+      const isFirstSem = sem === 1
+
+      // Find invoice for this semester â€” by semesterNumber first, then by order
       const invoice = rentInvoices.find(inv => {
         const invSem = (inv as { semesterNumber?: number }).semesterNumber
         if (invSem) return invSem === sem
         return rentInvoices.indexOf(inv) === i
       })
 
+      // The expected fee for this sem (sem 1 includes deposit)
+      const expectedFee = isFirstSem ? sem1Total : feePerSem
+
       let status: 'paid' | 'partial' | 'due' | 'overdue' | 'upcoming' | 'current'
       if (invoice) {
         status = invoice.status as 'paid' | 'partial' | 'due' | 'overdue'
       } else if (sem < currentSem) {
-        status = 'paid'
+        status = 'paid' // no invoice = assumed paid for past sems
       } else if (sem === currentSem) {
         status = 'current'
       } else {
         status = 'upcoming'
       }
 
-      // For current sem with no invoice: balance = feePerSem (needs to be paid)
-      const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? feePerSem : 0)
-      // Upcoming sems have balance=0 (not due yet), current sem without invoice has balance=feePerSem
-      const balance = invoice
-        ? Number(invoice.balance)
-        : (sem < currentSem ? 0 : sem === currentSem ? feePerSem : 0)
+      const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? expectedFee : 0)
+      const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : sem === currentSem ? expectedFee : 0)
 
       return {
         sem,
-        feeAmount: feePerSem,
+        feeAmount: expectedFee,
         status,
         invoice: invoice ? {
           id: invoice.id,
@@ -278,8 +286,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
         } : null,
         paidAmount,
         balance,
-        // Flag: can pay even without invoice (admin will create invoice on payment)
-        canPayWithoutInvoice: !invoice && sem === currentSem && feePerSem > 0,
+        canPayWithoutInvoice: !invoice && sem === currentSem && expectedFee > 0,
       }
     })
 
@@ -307,14 +314,48 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
         })),
       }))
 
-    const totalCourseFee = feePerSem * totalSems
-    const totalPaid = semesters.reduce((s, r) => s + r.paidAmount, 0)
-    // Only count actual due/overdue/partial balances, NOT upcoming sems
+    // Total course fee = sem1 (with deposit) + remaining sems
+    // sem1Total already includes deposit, so: sem1Total + (totalSems-1) * feePerSem
+    const totalCourseFee = sem1Total + feePerSem * (totalSems - 1)
+
+    // totalPaid = sum of actual payments recorded (not estimated)
+    const allPayments = await prisma.payment.findMany({
+      where: {
+        studentId,
+        utrRejected: false,
+        // Only count verified payments (cash/online auto-verified, UTR must be verified)
+        OR: [
+          { paymentMode: 'cash' },
+          { paymentMode: 'online', utrVerified: true },
+          { paymentMode: 'upi', utrVerified: true },
+          { paymentMode: 'bank_transfer', utrVerified: true },
+        ],
+      },
+      select: { amount: true },
+    })
+    const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0)
+
+    // totalDue = sum of all open invoice balances
     const totalDue = semesters
       .filter(r => ['due', 'overdue', 'partial', 'current'].includes(r.status))
       .reduce((s, r) => s + r.balance, 0)
       + otherInvoices.filter(i => ['due', 'overdue', 'partial'].includes(i.status))
           .reduce((s, i) => s + i.balance, 0)
+
+    // Auto-renew: if stay expired but current sem fee is paid, mark student active
+    const stayExpired = new Date(student.stayEndDate) < new Date()
+    if (stayExpired && student.status === 'active') {
+      const currentSemRow = semesters.find(s => s.sem === currentSem)
+      if (currentSemRow?.status === 'paid') {
+        // Stay is expired but fee is paid â€” extend stay by one semester period
+        const newEndDate = new Date(student.stayEndDate)
+        newEndDate.setMonth(newEndDate.getMonth() + 6) // extend 6 months
+        await prisma.student.update({
+          where: { id: studentId },
+          data: { stayEndDate: newEndDate, updatedAt: new Date() },
+        }).catch(() => {})
+      }
+    }
 
     res.json({
       success: true,
@@ -328,7 +369,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
           totalSems,
           rentPackage,
           feePerSem,
-          depositAmount: Number(student.depositAmount),
+          depositAmount,
           joiningDate: student.joiningDate,
           stayEndDate: student.stayEndDate,
         },
@@ -343,91 +384,159 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
           totalCourseFee,
           totalPaid,
           totalDue,
-          depositAmount: Number(student.depositAmount),
+          depositAmount,
         },
       },
     })
   } catch (err) { next(err) }
 }
 
-
 export async function submitPaymentRequest(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id
-    const { invoiceId, amount, transactionRef, paymentMode, semNumber } = req.body as {
-      invoiceId?: string; amount: number; transactionRef: string; paymentMode: string; semNumber?: number
+    const { invoiceId, amount, transactionRef, paymentMode, semNumber, requiresApproval } = req.body as {
+      invoiceId?: string; amount: number; transactionRef?: string; paymentMode: string
+      semNumber?: number; requiresApproval?: boolean
     }
 
-    if (!amount || !transactionRef) throw new ApiError(400, 'amount, transactionRef required')
-    if (amount <= 0) throw new ApiError(400, 'Amount must be positive')
+    if (!amount || amount <= 0) throw new ApiError(400, 'Amount must be positive')
 
-    // Normalize UTR — trim and uppercase for consistent comparison
+    // â”€â”€ ONLINE PAYMENT REQUEST (no UTR â€” just requesting admin approval) â”€â”€
+    if (requiresApproval || paymentMode === 'online') {
+      let targetInvoiceId = invoiceId
+
+      // Auto-create invoice if semNumber provided without invoiceId
+      if (!targetInvoiceId && semNumber) {
+      const student = await prisma.student.findUnique({ where: { id: studentId }, include: { room: true } })
+      if (!student) throw new ApiError(404, 'Student not found')
+
+      const existing = await prisma.invoice.findFirst({
+        where: { studentId, type: 'rent', semesterNumber: semNumber },
+      })
+      if (existing) {
+        targetInvoiceId = existing.id
+      } else {
+        const { generateInvoiceNumber } = await import('../utils/studentId')
+        const invoiceNumber = await generateInvoiceNumber()
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + 7)
+        const newInvoice = await prisma.invoice.create({
+          data: {
+            studentId,
+            invoiceNumber,
+            type: 'rent',
+            description: `Semester ${semNumber} fee`,
+            amount,
+            totalAmount: amount,
+            balance: amount,
+            dueDate,
+            status: 'due',
+            semesterNumber: semNumber,
+          },
+        })
+        targetInvoiceId = newInvoice.id
+      }
+    }
+
+    if (!targetInvoiceId) throw new ApiError(400, 'invoiceId or semNumber required')
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: targetInvoiceId },
+      select: { id: true, studentId: true, balance: true, status: true },
+    })
+    if (!invoice) throw new ApiError(404, 'Invoice not found')
+    if (invoice.studentId !== studentId) throw new ApiError(403, 'Not your invoice')
+    if (invoice.status === 'paid') throw new ApiError(400, 'Invoice already paid')
+
+    // Notify admin via WhatsApp with full context (non-blocking)
+    const studentForNotify = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true, name: true, studentId: true,
+        room: { select: { roomNumber: true, branch: { select: { contactPrimary: true } } } },
+      },
+    })
+    if (studentForNotify) {
+      const adminMobile = studentForNotify.room?.branch?.contactPrimary
+      if (adminMobile) {
+        const invDesc = targetInvoiceId
+          ? await prisma.invoice.findUnique({ where: { id: targetInvoiceId }, select: { description: true, type: true } })
+          : null
+        notifyOnlinePaymentRequest({
+          studentDbId: studentForNotify.id,
+          studentName: studentForNotify.name,
+          studentId: studentForNotify.studentId,
+          adminMobile,
+          amount,
+          invoiceDescription: invDesc?.description ?? invDesc?.type,
+        }).catch(() => {})
+      }
+    }
+
+      res.json({
+        success: true,
+        message: 'Payment request submitted. Admin will approve and notify you via WhatsApp.',
+        data: { invoiceId: targetInvoiceId, status: 'pending_approval' },
+      })
+      return
+    }
+
+    // â”€â”€ UTR PAYMENT (UPI/Bank transfer) â”€â”€
+    if (!transactionRef) throw new ApiError(400, 'transactionRef required for UPI/bank payments')
+
     const normalizedUtr = transactionRef.trim().toUpperCase()
     if (normalizedUtr.length < 6) throw new ApiError(400, 'UTR must be at least 6 characters')
 
-    // ── UTR DEDUPLICATION CHECK ──
-    // Check if this UTR was already used AND verified (approved by admin)
+    // UTR deduplication check
     const verifiedPayment = await prisma.payment.findFirst({
-      where: {
-        transactionRef: { equals: normalizedUtr, mode: 'insensitive' },
-        utrVerified: true,
-      },
-      select: { id: true, studentId: true, amount: true, paidDate: true },
+      where: { transactionRef: { equals: normalizedUtr, mode: 'insensitive' }, utrVerified: true },
+      select: { id: true },
     })
-    if (verifiedPayment) {
-      throw new ApiError(409, `This UTR has already been used for a verified payment. Each UTR can only be used once.`)
-    }
+    if (verifiedPayment) throw new ApiError(409, 'This UTR has already been used for a verified payment.')
 
-    // Check if same UTR is pending (not yet verified/rejected) by ANOTHER student
     const pendingByOther = await prisma.payment.findFirst({
       where: {
         transactionRef: { equals: normalizedUtr, mode: 'insensitive' },
-        utrVerified: false,
-        utrRejected: false,
+        utrVerified: false, utrRejected: false,
         studentId: { not: studentId },
       },
     })
-    if (pendingByOther) {
-      throw new ApiError(409, 'This UTR is already submitted by another student. Please check your UTR number.')
-    }
+    if (pendingByOther) throw new ApiError(409, 'This UTR is already submitted by another student.')
 
-    // Check if this student already submitted this UTR (pending)
     const ownPending = await prisma.payment.findFirst({
       where: {
         transactionRef: { equals: normalizedUtr, mode: 'insensitive' },
-        studentId,
-        utrVerified: false,
-        utrRejected: false,
+        studentId, utrVerified: false, utrRejected: false,
       },
     })
-    if (ownPending) {
-      throw new ApiError(409, 'You already submitted this UTR. Please wait for admin verification.')
-    }
+    if (ownPending) throw new ApiError(409, 'You already submitted this UTR. Please wait for admin verification.')
 
     let targetInvoiceId = invoiceId
 
-    // Auto-create invoice if semNumber provided without invoiceId
     if (!targetInvoiceId && semNumber) {
       const student = await prisma.student.findUnique({ where: { id: studentId }, include: { room: true } })
       if (!student) throw new ApiError(404, 'Student not found')
+
+      // Calculate correct amount for this semester (sem 1 includes deposit)
+      let feePerSem = 0
+      if (student.rentPackage === 'semester') feePerSem = Number(student.room?.semesterRent ?? 0)
+      else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0) * 6
+      else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0) / 2
+      const depositAmt = Number(student.depositAmount ?? 5000)
+      const semInvoiceAmount = semNumber === 1 ? feePerSem + depositAmt : feePerSem
 
       const { generateInvoiceNumber } = await import('../utils/studentId')
       const invoiceNumber = await generateInvoiceNumber()
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + 7)
-
       const newInvoice = await prisma.invoice.create({
         data: {
-          studentId,
-          invoiceNumber,
-          type: 'rent',
-          description: `Semester ${semNumber} fee`,
-          amount,
-          totalAmount: amount,
-          balance: amount,
-          dueDate,
-          status: 'due',
-          semesterNumber: semNumber,
+          studentId, invoiceNumber, type: 'rent',
+          description: semNumber === 1
+            ? `Semester 1 fee + Security deposit (Rs.${depositAmt})`
+            : `Semester ${semNumber} fee`,
+          amount: semInvoiceAmount, totalAmount: semInvoiceAmount, balance: semInvoiceAmount,
+          dueDate, status: 'due', semesterNumber: semNumber,
         },
       })
       targetInvoiceId = newInvoice.id
@@ -442,7 +551,18 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
     if (!invoice) throw new ApiError(404, 'Invoice not found')
     if (invoice.studentId !== studentId) throw new ApiError(403, 'Not your invoice')
     if (invoice.status === 'paid') throw new ApiError(400, 'Invoice already paid')
-    if (amount > Number(invoice.balance) + 0.01) throw new ApiError(400, `Amount ₹${amount} exceeds balance ₹${invoice.balance}`)
+
+    // Overpayment: if paying more than balance, carry excess to next sem or warn if last sem
+    const invoiceBalance = Number(invoice.balance)
+    if (amount > invoiceBalance + 0.01) {
+      const stu = await prisma.student.findUnique({ where: { id: studentId }, select: { semester: true, totalSemesters: true } })
+      const totalSems = (stu as { totalSemesters?: number })?.totalSemesters ?? 8
+      const invSemNum = (invoice as { semesterNumber?: number }).semesterNumber ?? (stu?.semester ?? 1)
+      if (invSemNum >= totalSems) {
+        throw new ApiError(400, 'This is your last semester. Please pay the exact amount: Rs.' + invoiceBalance.toLocaleString('en-IN'))
+      }
+      // Allow overpayment -- excess will be credited to next sem
+    }
 
     const { generateReceiptNumber } = await import('../utils/studentId')
     const receiptNumber = await generateReceiptNumber()
@@ -459,35 +579,58 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
           utrVerified: false,
           utrRejected: false,
           paidDate: new Date(),
-          notes: 'PENDING_VERIFICATION — submitted by student via portal',
+          notes: 'PENDING_VERIFICATION - submitted by student via portal',
         },
       })
-      // Mark invoice as partial (pending verification)
       const newPaid = Math.min(amount, Number(invoice.balance))
       const newBalance = Math.max(0, Number(invoice.balance) - newPaid)
       await tx.invoice.update({
         where: { id: targetInvoiceId! },
-        data: {
-          paidAmount: { increment: newPaid },
-          balance: newBalance,
-          status: 'partial', // stays partial until admin verifies
-          updatedAt: new Date(),
-        },
+        data: { paidAmount: { increment: newPaid }, balance: newBalance, status: 'partial', updatedAt: new Date() },
       })
+
+      // Overpayment: carry excess to next semester invoice
+      const excess = amount - Number(invoice.balance)
+      if (excess > 0.01) {
+        const invSemNum = (invoice as { semesterNumber?: number }).semesterNumber
+        if (invSemNum) {
+          const nextSemNum = invSemNum + 1
+          const nextInvoice = await tx.invoice.findFirst({
+            where: { studentId, semesterNumber: nextSemNum },
+          })
+          if (nextInvoice) {
+            const nextNewBalance = Math.max(0, Number(nextInvoice.balance) - excess)
+            const nextNewPaid = Number(nextInvoice.paidAmount) + excess
+            const nextStatus = nextNewBalance <= 0 ? 'paid' : 'partial'
+            await tx.invoice.update({
+              where: { id: nextInvoice.id },
+              data: { paidAmount: nextNewPaid, balance: nextNewBalance, status: nextStatus, updatedAt: new Date() },
+            })
+          }
+        }
+      }
     })
 
-    // Notify admin via WhatsApp (non-blocking)
-    const student = await prisma.student.findUnique({
+    // Notify admin via WhatsApp with full context (non-blocking)
+    const studentForUtr = await prisma.student.findUnique({
       where: { id: studentId },
-      select: { name: true, studentId: true, room: { select: { branch: { select: { contactPrimary: true } } } } },
+      select: {
+        id: true, name: true, studentId: true,
+        room: { select: { roomNumber: true, branch: { select: { contactPrimary: true } } } },
+      },
     })
-    if (student) {
-      const { sendWhatsAppMessage } = await import('../config/whatsapp')
-      const adminMobile = student.room?.branch?.contactPrimary
+    if (studentForUtr) {
+      const adminMobile = studentForUtr.room?.branch?.contactPrimary
       if (adminMobile) {
-        sendWhatsAppMessage(adminMobile,
-          `💰 *Payment Verification Required*\n\nStudent: ${student.name} (${student.studentId})\nAmount: ₹${amount}\nUTR: ${normalizedUtr}\nMode: ${paymentMode.toUpperCase()}\n\nPlease verify in admin portal.`
-        ).catch(() => {})
+        notifyUtrSubmittedAdmin({
+          studentDbId: studentForUtr.id,
+          studentName: studentForUtr.name,
+          studentId: studentForUtr.studentId,
+          adminMobile,
+          amount,
+          utr: normalizedUtr,
+          paymentMode,
+        }).catch(() => {})
       }
     }
 
@@ -562,5 +705,25 @@ export async function getMyPendingPayments(req: Request, res: Response, next: Ne
       take: 20,
     })
     res.json({ success: true, data: payments })
+  } catch (err) { next(err) }
+}
+
+// Get UPI/Bank payment details for student portal
+export async function getPaymentDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id: req.user!.id },
+      select: { room: { select: { branchId: true } } },
+    })
+    const branchId = student?.room?.branchId
+    if (!branchId) { res.json({ success: true, data: null }); return }
+
+    const settings = await prisma.settings.findUnique({
+      where: { branchId },
+      select: { staffPermissions: true },
+    })
+    const perms = (settings?.staffPermissions as Record<string, unknown>) ?? {}
+    const paymentDetails = (perms['paymentDetails'] as Record<string, string> | undefined) ?? null
+    res.json({ success: true, data: paymentDetails })
   } catch (err) { next(err) }
 }

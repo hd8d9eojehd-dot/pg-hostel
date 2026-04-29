@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
-import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2 } from 'lucide-react'
+import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, RotateCcw, Info } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 
 export default function WhatsAppPage() {
@@ -21,6 +21,24 @@ export default function WhatsAppPage() {
   const [message, setMessage] = useState('')
   const [bulkMessage, setBulkMessage] = useState('')
   const [page, setPage] = useState(1)
+
+  // Detect if running on production (Vercel) vs local
+  const isProduction = typeof window !== 'undefined' &&
+    !window.location.hostname.includes('localhost') &&
+    !window.location.hostname.includes('127.0.0.1')
+
+  // Component that fetches QR image from backend (avoids client-side canvas issues)
+  function WhatsAppQrImage() {
+    const { data: qrData, isLoading } = useQuery({
+      queryKey: ['wa-qr-image'],
+      queryFn: () => api.get('/whatsapp/qr-image').then(r => r.data.data),
+      refetchInterval: 18000, // refresh every 18s (QR expires at 20s)
+      staleTime: 0,
+    })
+    if (isLoading) return <div className="w-[min(220px,80vw)] aspect-square bg-gray-100 rounded-xl animate-pulse flex items-center justify-center"><QrCode className="w-8 h-8 text-gray-300" /></div>
+    if (!qrData?.dataUrl) return <div className="w-[min(220px,80vw)] aspect-square bg-gray-100 rounded-xl flex items-center justify-center text-xs text-gray-400">QR loading...</div>
+    return <img src={qrData.dataUrl} alt="WhatsApp QR Code" className="rounded-xl border shadow-sm w-[min(220px,80vw)] aspect-square" />
+  }
 
   // Bulk filters
   const [bulkStatusFilter, setBulkStatusFilter] = useState<'active' | 'all'>('active')
@@ -38,7 +56,11 @@ export default function WhatsAppPage() {
   const { data: status, refetch: refetchStatus } = useQuery({
     queryKey: ['wa-status'],
     queryFn: () => api.get('/whatsapp/status').then(r => r.data.data),
-    refetchInterval: 15000,
+    refetchInterval: (query) => {
+      // Poll every 5s while waiting for QR scan, 30s once connected
+      const data = query.state.data as { ready?: boolean } | undefined
+      return data?.ready ? 30000 : 5000
+    },
   })
 
   const { data: logs, isLoading: logsLoading } = useQuery({
@@ -83,12 +105,7 @@ export default function WhatsAppPage() {
       const params: Record<string, string> = { limit: '200' }
       if (bulkStatusFilter !== 'all') params['status'] = bulkStatusFilter
       const res = await api.get('/students', { params })
-      let students = res.data.students ?? []
-
-      // Client-side fee status filter if needed
-      if (bulkFeeStatus !== 'all') {
-        // Pass filter to backend via send-bulk
-      }
+      const students = res.data.students ?? []
 
       const messages = students.map((s: { id: string; mobile: string }) => ({
         mobile: s.mobile,
@@ -124,6 +141,27 @@ export default function WhatsAppPage() {
     onError: () => toast({ title: 'Failed to save templates', variant: 'destructive' }),
   })
 
+  const logoutWa = useMutation({
+    mutationFn: () => api.post('/whatsapp/logout'),
+    onSuccess: () => {
+      toast({ title: '✓ WhatsApp logged out', description: 'Use Reconnect to scan a new QR code.' })
+      qc.invalidateQueries({ queryKey: ['wa-status'] })
+      refetchStatus()
+    },
+    onError: (e: unknown) => toast({ title: 'Logout failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
+  })
+
+  const reconnectWa = useMutation({
+    mutationFn: () => api.post('/whatsapp/reconnect'),
+    onSuccess: () => {
+      toast({ title: '✓ Reconnecting...', description: 'QR code will appear shortly. Click Refresh.' })
+      // Poll more aggressively after reconnect
+      setTimeout(() => refetchStatus(), 3000)
+      setTimeout(() => refetchStatus(), 8000)
+    },
+    onError: (e: unknown) => toast({ title: 'Reconnect failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
+  })
+
   const logsList = logs?.data ?? []
   const pagination = logs?.pagination
 
@@ -137,37 +175,97 @@ export default function WhatsAppPage() {
   return (
     <div>
       <Header title="WhatsApp" />
-      <div className="p-4 md:p-6 space-y-6 max-w-4xl">
+      <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
+
+        {/* Production notice */}
+        {isProduction && (
+          <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-blue-800">WhatsApp runs on your local backend</p>
+              <p className="text-sm text-blue-700 mt-0.5">
+                You are accessing the admin portal from a production URL. WhatsApp features (QR scan, sending messages) only work when the backend is running locally.
+              </p>
+              <p className="text-sm text-blue-600 mt-1">
+                To use WhatsApp: open the admin portal at{' '}
+                <a href="http://localhost:3000/whatsapp" className="font-mono underline hover:text-blue-800">
+                  http://localhost:3000/whatsapp
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Connection status */}
         <Card className={status?.ready ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {status?.ready ? <Wifi className="w-5 h-5 text-green-600" /> : <WifiOff className="w-5 h-5 text-red-500" />}
-              <div>
-                <p className={`font-semibold ${status?.ready ? 'text-green-800' : 'text-red-800'}`}>
-                  {status?.ready ? 'WhatsApp Connected' : 'WhatsApp Disconnected'}
-                </p>
-                {!status?.ready && (
-                  <p className="text-xs text-red-600 mt-0.5">
-                    Check backend terminal for QR code. Run: <code className="bg-red-100 px-1 rounded">cd backend && npm run dev</code>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                {status?.ready ? <Wifi className="w-5 h-5 text-green-600" /> : <WifiOff className="w-5 h-5 text-red-500" />}
+                <div>
+                  <p className={`font-semibold ${status?.ready ? 'text-green-800' : 'text-red-800'}`}>
+                    {status?.ready ? 'WhatsApp Connected' : status?.qrAvailable ? 'Scan QR to Connect' : 'WhatsApp Disconnected'}
                   </p>
+                  {!status?.ready && !status?.qrAvailable && (
+                    <p className="text-xs text-red-600 mt-0.5">
+                      Starting WhatsApp... QR code will appear here shortly.
+                    </p>
+                  )}
+                  {status?.ready && (
+                    <p className="text-xs text-green-600 mt-0.5">Messages will be delivered in real time.</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => refetchStatus()}>
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </Button>
+                {status?.ready && (
+                  <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={() => { if (confirm('Log out WhatsApp? You will need to scan QR again.')) logoutWa.mutate() }}
+                    disabled={logoutWa.isPending}>
+                    {logoutWa.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                    Logout WhatsApp
+                  </Button>
+                )}
+                {!status?.ready && (
+                  <Button variant="outline" size="sm" className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                    onClick={() => reconnectWa.mutate()}
+                    disabled={reconnectWa.isPending}>
+                    {reconnectWa.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                    Reconnect
+                  </Button>
                 )}
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => refetchStatus()}>
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
-            </Button>
+
+            {/* QR Code panel — shown when WhatsApp needs to be linked */}
+            {!status?.ready && status?.qrAvailable && status?.qr && (
+              <div className="mt-4 flex flex-col items-center gap-3 p-4 bg-white rounded-xl border border-red-200">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <QrCode className="w-4 h-4" /> Scan with WhatsApp to link this device
+                </div>
+                <WhatsAppQrImage />
+                <div className="text-xs text-gray-500 text-center space-y-1">
+                  <p>1. Open WhatsApp on your phone</p>
+                  <p>2. Tap <strong>⋮ Menu → Linked Devices → Link a Device</strong></p>
+                  <p>3. Point your camera at the QR code above</p>
+                  <p className="text-orange-600 font-medium">QR refreshes every 20 seconds — click Refresh if it expires</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Tabs defaultValue="single">
-          <TabsList>
-            <TabsTrigger value="single" className="gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Single</TabsTrigger>
-            <TabsTrigger value="bulk" className="gap-1.5"><Users className="w-3.5 h-3.5" /> Bulk</TabsTrigger>
-            <TabsTrigger value="templates" className="gap-1.5"><FileText className="w-3.5 h-3.5" /> Templates</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+            <TabsList className="w-max min-w-full">
+              <TabsTrigger value="single" className="gap-1.5 flex-1"><MessageSquare className="w-3.5 h-3.5" /> Single</TabsTrigger>
+              <TabsTrigger value="bulk" className="gap-1.5 flex-1"><Users className="w-3.5 h-3.5" /> Bulk</TabsTrigger>
+              <TabsTrigger value="templates" className="gap-1.5 flex-1"><FileText className="w-3.5 h-3.5" /> Templates</TabsTrigger>
+              <TabsTrigger value="logs" className="flex-1">Logs</TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Single message */}
           <TabsContent value="single" className="mt-4">

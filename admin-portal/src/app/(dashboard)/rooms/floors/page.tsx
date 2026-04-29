@@ -67,7 +67,7 @@ export default function FloorsPage() {
   return (
     <div>
       <Header title="Floor Management" />
-      <div className="p-4 md:p-6 space-y-4 max-w-2xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-2xl mx-auto">
         <div className="flex items-center justify-between">
           <Link href="/rooms">
             <Button variant="ghost" size="sm" className="gap-1.5">
@@ -99,16 +99,16 @@ export default function FloorsPage() {
               const partial = f.rooms.filter(r => r.status === 'partial').length
               return (
                 <Card key={f.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 flex items-center justify-between">
+                  <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${f.groupType === 'villa' ? 'bg-orange-100' : 'bg-primary/10'}`}>
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${f.groupType === 'villa' ? 'bg-orange-100' : 'bg-primary/10'}`}>
                         {f.groupType === 'villa'
                           ? <Home className="w-5 h-5 text-orange-600" />
                           : <span className="text-lg font-bold text-primary">{f.floorNumber}</span>
                         }
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{f.floorName ?? (f.groupType === 'villa' ? `Villa ${f.floorNumber}` : `Floor ${f.floorNumber}`)}</p>
                           <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${f.groupType === 'villa' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
                             {f.groupType === 'villa' ? 'Villa' : 'Floor'}
@@ -117,7 +117,7 @@ export default function FloorsPage() {
                         <p className="text-xs text-gray-500">{f.rooms.length} rooms total</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="flex gap-3 text-xs">
                         <div className="text-center">
                           <p className="font-bold text-green-600">{available}</p>

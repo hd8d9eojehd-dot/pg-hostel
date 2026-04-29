@@ -51,7 +51,7 @@ export default function ChangePasswordPage() {
   })
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-white p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-green-50 to-white p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl mb-3">

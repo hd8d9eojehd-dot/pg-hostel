@@ -28,12 +28,25 @@ export async function revenueReport(req: Request, res: Response, next: NextFunct
   try {
     const { month, year } = req.query as { month: string; year: string }
     const start = new Date(parseInt(year), parseInt(month) - 1, 1)
-    const end = new Date(parseInt(year), parseInt(month), 0)
+    const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59)
+
+    // Only count verified payments
+    const verifiedPaymentFilter = {
+      paidDate: { gte: start, lte: end },
+      utrRejected: false,
+      OR: [
+        { paymentMode: 'cash' },
+        { paymentMode: 'online' },
+        { paymentMode: 'upi', utrVerified: true },
+        { paymentMode: 'bank_transfer', utrVerified: true },
+      ],
+    }
 
     const [payments, invoices] = await Promise.all([
       prisma.payment.findMany({
-        where: { paidDate: { gte: start, lte: end } },
+        where: verifiedPaymentFilter,
         include: { student: { select: { name: true, studentId: true } }, invoice: { select: { type: true } } },
+        orderBy: { paidDate: 'desc' },
       }),
       prisma.invoice.findMany({
         where: { dueDate: { gte: start, lte: end } },

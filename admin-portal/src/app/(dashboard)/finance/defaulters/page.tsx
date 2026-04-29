@@ -2,9 +2,10 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
 import { ArrowLeft, Send, AlertTriangle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
@@ -13,24 +14,48 @@ const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api
 
 export default function DefaultersPage() {
   const { toast } = useToast()
+  const { user } = useAuthStore()
 
   const { data: defaulters, isLoading } = useQuery({
     queryKey: ['defaulters'],
     queryFn: () => api.get('/finance/defaulters').then(r => r.data.data),
   })
 
+  // Fetch branch info for PG name in messages
+  const { data: branch } = useQuery({
+    queryKey: ['branch', user?.branchId],
+    queryFn: () => api.get(`/settings/branch/${user?.branchId}`).then(r => r.data.data),
+    enabled: !!user?.branchId,
+    staleTime: 60_000,
+  })
+
+  const pgName = branch?.name ?? 'PG Hostel'
+  const pgContact = branch?.contactPrimary ?? ''
+  const studentPortalUrl = process.env['NEXT_PUBLIC_STUDENT_PORTAL_URL'] ?? 'https://south-pg-students.vercel.app'
+
   const sendReminders = useMutation({
     mutationFn: () => api.post('/whatsapp/send-bulk', {
       messages: (defaulters ?? []).map((inv: {
-        student: { mobile: string; name: string; studentId: string }
-        balance: number; dueDate: string
+        student: { mobile: string; name: string; studentId: string; room?: { roomNumber: string } }
+        balance: number; dueDate: string; status: string
       }) => ({
         mobile: inv.student.mobile,
-        message: `🔴 *Payment Overdue*\n\nDear ${inv.student.name} (${inv.student.studentId}),\n\nYour payment of *₹${Number(inv.balance).toLocaleString('en-IN')}* was due on ${formatDate(inv.dueDate)} and is now *overdue*.\n\nPlease pay immediately or contact admin.`,
+        message:
+          `🔴 *Payment Overdue — ${pgName}*\n\n` +
+          `Dear *${inv.student.name}* (${inv.student.studentId}),\n\n` +
+          `Your payment is *overdue*. Please pay immediately to avoid further charges.\n\n` +
+          `💰 *Amount Overdue:* ₹${Number(inv.balance).toLocaleString('en-IN')}\n` +
+          `📅 *Was Due On:* ${formatDate(inv.dueDate)}\n` +
+          (inv.student.room?.roomNumber ? `🛏️ *Room:* ${inv.student.room.roomNumber}\n` : '') +
+          `\n💳 *Pay via Student Portal:*\n` +
+          `🔗 ${studentPortalUrl}/finance\n\n` +
+          `Contact admin if you need assistance.\n` +
+          (pgContact ? `📞 ${pgContact}\n` : '') +
+          `\n_${pgName}_`,
       })),
     }),
     onSuccess: (res) => {
-      toast({ title: `Reminders sent to ${res.data.data?.sent ?? 0} students` })
+      toast({ title: `✓ Reminders sent to ${res.data.data?.sent ?? 0} students` })
     },
     onError: () => toast({ title: 'Failed to send reminders', variant: 'destructive' }),
   })
@@ -42,14 +67,14 @@ export default function DefaultersPage() {
   return (
     <div>
       <Header title="Defaulters" />
-      <div className="p-4 md:p-6 space-y-4 max-w-4xl">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Link href="/finance">
             <Button variant="ghost" size="sm" className="gap-1.5">
               <ArrowLeft className="w-4 h-4" /> Finance
             </Button>
           </Link>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <a href={`${API_URL}/reports/defaulters/export`} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" size="sm">Export CSV</Button>
             </a>

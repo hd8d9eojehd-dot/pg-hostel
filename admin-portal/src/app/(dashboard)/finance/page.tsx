@@ -72,10 +72,10 @@ export default function FinancePage() {
   return (
     <div>
       <Header title="Finance" />
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {[
             { label: 'Total Collected', value: summary?.totalCollected ?? 0, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50', isCurrency: true, href: undefined },
             { label: 'This Month', value: summary?.thisMonthCollected ?? 0, icon: IndianRupee, color: 'text-blue-600', bg: 'bg-blue-50', isCurrency: true, href: undefined },
@@ -83,11 +83,11 @@ export default function FinancePage() {
             { label: 'Overdue Count', value: summary?.overdueCount ?? 0, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', isCurrency: false, href: '/finance/defaulters' },
           ].map(({ label, value, icon: Icon, color, bg, isCurrency, href }) => (
             <Card key={label} className={href ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}>
-              <CardContent className="p-4" onClick={() => href && (window.location.href = href)}>
-                <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center mb-3`}>
+              <CardContent className="p-3 md:p-4" onClick={() => href && (window.location.href = href)}>
+                <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center mb-2 md:mb-3`}>
                   <Icon className={`w-4 h-4 ${color}`} />
                 </div>
-                <p className="text-xl font-bold">{isCurrency ? formatCurrency(value) : value}</p>
+                <p className="text-lg md:text-xl font-bold">{isCurrency ? formatCurrency(value) : value}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{label}</p>
               </CardContent>
             </Card>
@@ -95,13 +95,15 @@ export default function FinancePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
           <Button variant={activeTab === 'invoices' ? 'default' : 'outline'} size="sm"
+            className="flex-shrink-0"
             onClick={() => setActiveTab('invoices')}>
             <IndianRupee className="w-3.5 h-3.5 mr-1.5" /> Invoices
           </Button>
           <Button variant={activeTab === 'utr' ? 'default' : 'outline'} size="sm"
-            onClick={() => setActiveTab('utr')} className="relative">
+            className="relative flex-shrink-0"
+            onClick={() => setActiveTab('utr')}>
             <Clock className="w-3.5 h-3.5 mr-1.5" /> UTR Verification
             {pendingCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">
@@ -109,7 +111,7 @@ export default function FinancePage() {
               </span>
             )}
           </Button>
-          <Button variant="ghost" size="sm" className="ml-auto gap-1.5"
+          <Button variant="ghost" size="sm" className="ml-auto flex-shrink-0 gap-1.5"
             onClick={() => { refetchSummary(); refetchUtr() }}>
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </Button>
@@ -207,23 +209,25 @@ export default function FinancePage() {
         {/* ── INVOICES TAB ── */}
         {activeTab === 'invoices' && (
           <Card>
-            <CardHeader className="flex-row items-center justify-between pb-4">
-              <CardTitle>Invoices</CardTitle>
-              <div className="flex gap-2">
-                <Link href="/finance/extra-charges">
-                  <Button size="sm" variant="outline">Extra Charges</Button>
-                </Link>
-                <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}
-                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm">
-                  <option value="">All</option>
-                  <option value="due">Due</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="paid">Paid</option>
-                  <option value="partial">Partial</option>
-                </select>
-                <Link href="/finance/new-invoice">
-                  <Button size="sm" className="gap-1"><Plus className="w-3.5 h-3.5" /> Invoice</Button>
-                </Link>
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle className="text-base">Invoices</CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/finance/extra-charges">
+                    <Button size="sm" variant="outline" className="h-8 text-xs">Extra Charges</Button>
+                  </Link>
+                  <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}
+                    className="h-8 rounded-lg border border-input bg-background px-2 text-xs">
+                    <option value="">All</option>
+                    <option value="due">Due</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="paid">Paid</option>
+                    <option value="partial">Partial</option>
+                  </select>
+                  <Link href="/finance/new-invoice">
+                    <Button size="sm" className="gap-1 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Invoice</Button>
+                  </Link>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -278,8 +282,8 @@ export default function FinancePage() {
                                   <Button variant="ghost" size="sm" className="text-xs text-green-600 h-6 px-2">Pay</Button>
                                 </Link>
                               )}
-                              {inv.status === 'paid' && (
-                                <a href={`${API_URL}/finance/receipts/${inv.invoiceNumber}`}
+                              {inv.status === 'paid' && inv.payments?.[0] && (
+                                <a href={`${API_URL}/finance/receipts/${inv.payments[0].receiptNumber}`}
                                   target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                                   className="text-xs text-primary hover:underline flex items-center gap-0.5">
                                   <Download className="w-3 h-3" /> Receipt

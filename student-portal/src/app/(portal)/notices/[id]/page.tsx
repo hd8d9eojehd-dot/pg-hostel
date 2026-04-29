@@ -36,7 +36,7 @@ export default function NoticeDetailPage() {
   return (
     <div>
       <TopBar title="Notice" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
         <Link href="/notices">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Notices

@@ -21,11 +21,11 @@ export default function RoomsPage() {
   return (
     <div>
       <Header title="Rooms" />
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
             {[
               { label: 'Total', value: stats.total, color: 'text-gray-700' },
               { label: 'Available', value: stats.available, color: 'text-green-600' },
@@ -34,9 +34,9 @@ export default function RoomsPage() {
               { label: 'Maintenance', value: stats.maintenance, color: 'text-orange-600' },
             ].map(({ label, value, color }) => (
               <Card key={label}>
-                <CardContent className="p-4 text-center">
-                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                  <p className="text-xs text-gray-500 mt-1">{label}</p>
+                <CardContent className="p-3 text-center">
+                  <p className={`text-xl md:text-2xl font-bold ${color}`}>{value}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{label}</p>
                 </CardContent>
               </Card>
             ))}
@@ -44,9 +44,9 @@ export default function RoomsPage() {
         )}
 
         {/* Toolbar */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Floor Map</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Link href="/rooms/floors">
               <Button size="sm" variant="outline">Manage Floors</Button>
             </Link>

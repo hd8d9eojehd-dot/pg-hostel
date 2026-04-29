@@ -83,7 +83,7 @@ export default function MyDocumentsPage() {
   return (
     <div>
       <TopBar title="My Documents" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
 
         {/* Upload */}
         <Card>

@@ -55,7 +55,7 @@ export default function NewRoomPage() {
   return (
     <div>
       <Header title="Add Room" />
-      <div className="p-4 md:p-6 max-w-xl">
+      <div className="p-4 md:p-6 max-w-xl mx-auto">
         <Link href="/rooms">
           <Button variant="ghost" size="sm" className="gap-1.5 mb-4">
             <ArrowLeft className="w-4 h-4" /> Rooms
@@ -102,7 +102,7 @@ export default function NewRoomPage() {
                 {errors.bedCount && <p className="text-xs text-destructive">{errors.bedCount.message}</p>}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label>Monthly Rent (₹)</Label>
                   <Input type="number" {...register('monthlyRent', { valueAsNumber: true })} placeholder="8000" />

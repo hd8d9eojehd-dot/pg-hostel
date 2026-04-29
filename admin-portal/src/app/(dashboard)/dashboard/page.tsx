@@ -31,7 +31,7 @@ export default function DashboardPage() {
   if (isLoading) return (
     <div>
       <Header title="Dashboard" />
-      <div className="p-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="p-4 md:p-6 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
         {Array.from({ length: 6 }).map((_, i) => <Card key={i}><CardContent className="p-4"><div className="h-20 bg-gray-100 rounded animate-pulse" /></CardContent></Card>)}
       </div>
     </div>
@@ -52,43 +52,43 @@ export default function DashboardPage() {
   return (
     <div>
       <Header title="Dashboard" />
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
 
         {/* Last updated */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-gray-400">Last updated: {dataUpdatedAt ? formatDateTime(new Date(dataUpdatedAt)) : '—'}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <p className="text-xs text-gray-400 flex-shrink-0">Updated: {dataUpdatedAt ? formatDateTime(new Date(dataUpdatedAt)) : '—'}</p>
             {data?.stats && (
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-green-600 font-medium">₹{Number(data.stats.thisMonthCollected ?? 0).toLocaleString('en-IN')} this month</span>
                 <span className="text-red-500 font-medium">₹{Number(data.stats.totalPending ?? 0).toLocaleString('en-IN')} pending</span>
               </div>
             )}
           </div>
-          <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={handleRefresh}>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8 flex-shrink-0" onClick={handleRefresh}>
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </Button>
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
           {statCards.map(({ label, value, sub, icon: Icon, color, bg, href }) => (
             <Link key={label} href={href}>
-              <Card className="hover:shadow-md transition-all hover:-translate-y-0.5 cursor-pointer">
-                <CardContent className="p-4">
-                  <div className={`w-10 h-10 ${bg} rounded-xl flex items-center justify-center mb-3`}>
-                    <Icon className={`w-5 h-5 ${color}`} />
+              <Card className="hover:shadow-md transition-all hover:-translate-y-0.5 cursor-pointer h-full">
+                <CardContent className="p-3 md:p-4">
+                  <div className={`w-9 h-9 md:w-10 md:h-10 ${bg} rounded-xl flex items-center justify-center mb-2 md:mb-3`}>
+                    <Icon className={`w-4 h-4 md:w-5 md:h-5 ${color}`} />
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{value}</p>
+                  <p className="text-xl md:text-2xl font-bold text-gray-900">{value}</p>
                   <p className="text-xs font-medium text-gray-700 mt-0.5 leading-tight">{label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">{sub}</p>
                 </CardContent>
               </Card>
             </Link>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Revenue chart */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -97,7 +97,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={data?.monthlyRevenue ?? []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -128,7 +128,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Recent payments */}
           <Card>
             <CardHeader>

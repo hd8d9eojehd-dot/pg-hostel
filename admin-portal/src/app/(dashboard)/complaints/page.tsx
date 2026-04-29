@@ -82,26 +82,26 @@ export default function ComplaintsPage() {
       <div className="p-4 md:p-6 space-y-4">
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}
-            className="h-10 rounded-lg border border-input bg-background px-3 text-sm">
+            className="h-10 rounded-lg border border-input bg-background px-3 text-sm flex-shrink-0">
             <option value="">All Status</option>
             {['new', 'assigned', 'in_progress', 'resolved', 'closed'].map(s => (
               <option key={s} value={s}>{s.replace('_', ' ')}</option>
             ))}
           </select>
           <select value={category} onChange={e => { setCategory(e.target.value); setPage(1) }}
-            className="h-10 rounded-lg border border-input bg-background px-3 text-sm">
+            className="h-10 rounded-lg border border-input bg-background px-3 text-sm flex-shrink-0">
             <option value="">All Categories</option>
             {['wifi', 'fan', 'light', 'water', 'cleaning', 'food', 'furniture', 'plumbing', 'pest', 'noise', 'other'].map(c => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => refetch()}>
+          <Button variant="ghost" size="sm" className="gap-1.5 flex-shrink-0" onClick={() => refetch()}>
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </Button>
           {selected.size > 0 && (
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
               <span className="text-sm text-gray-500">{selected.size} selected ({resolvedSelected} deletable)</span>
               <Button size="sm" variant="destructive" className="gap-1.5"
                 disabled={resolvedSelected === 0 || deleteBulk.isPending}

@@ -69,7 +69,11 @@ app.use((_req, res) => {
 async function bootstrap(): Promise<void> {
   try {
     await connectPrisma()
-    await connectRedis()
+
+    // Connect Redis — non-blocking if unavailable, but wait up to 3s for Upstash TLS handshake
+    connectRedis().catch(() => {})
+    await new Promise(r => setTimeout(r, 3000))
+
     initCashfree()
 
     // Run schema migrations (add new columns if missing) — non-blocking

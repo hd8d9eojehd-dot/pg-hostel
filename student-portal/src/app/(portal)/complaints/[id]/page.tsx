@@ -50,7 +50,7 @@ export default function ComplaintDetailPage() {
   return (
     <div>
       <TopBar title="Complaint Details" />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">
         <Link href="/complaints">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Complaints

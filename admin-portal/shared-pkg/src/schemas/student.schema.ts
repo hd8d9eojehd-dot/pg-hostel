@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { STUDENT_STATUS, RENT_PACKAGE, STAY_DURATION } from '../constants/status.constants'
+import { STUDENT_STATUS, RENT_PACKAGE } from '../constants/status.constants'
 
 const indianMobile = z
   .string()
@@ -8,6 +8,9 @@ const indianMobile = z
 const aadhaarNumber = z
   .string()
   .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
+
+// Free-form stay duration: e.g. "12months", "6months", "1year", "18months"
+const stayDurationSchema = z.string().regex(/^\d+(months?|years?)$/, 'Stay duration must be like 12months or 1year')
 
 export const CreateStudentSchema = z.object({
   name: z.string().min(2).max(100).trim(),
@@ -29,7 +32,7 @@ export const CreateStudentSchema = z.object({
   semester: z.number().int().min(1).max(12),
   totalSemesters: z.number().int().min(1).max(16).default(8),
   joiningDate: z.string().date(),
-  stayDuration: z.enum(STAY_DURATION),
+  stayDuration: stayDurationSchema,
   rentPackage: z.enum(RENT_PACKAGE),
   depositAmount: z.number().min(0).max(999999),
   notes: z.string().max(1000).optional(),
@@ -40,6 +43,7 @@ export const CreateStudentSchema = z.object({
     paymentMode: z.enum(['online', 'semi_offline', 'cash']),
     transactionRef: z.string().max(100).optional(),
     cashAmount: z.number().positive().optional(),
+    customAmount: z.number().positive().optional(),
   }).optional(),
 })
 export type CreateStudentInput = z.infer<typeof CreateStudentSchema>
@@ -55,7 +59,7 @@ export const RenewStudentSchema = z.object({
   roomId: z.string().uuid(),
   bedId: z.string().uuid(),
   joiningDate: z.string().date(),
-  stayDuration: z.enum(STAY_DURATION),
+  stayDuration: stayDurationSchema,
   rentPackage: z.enum(RENT_PACKAGE),
   depositAmount: z.number().min(0).max(999999),
 })

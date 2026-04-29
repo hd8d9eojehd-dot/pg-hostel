@@ -30,7 +30,7 @@ export default function HomePage() {
   return (
     <div>
       <TopBar />
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-6">
+      <div className="p-4 space-y-4 max-w-lg mx-auto">{/* bottom padding handled by portal layout */}
 
         {/* Room card */}
         {isLoading ? (
@@ -93,12 +93,12 @@ export default function HomePage() {
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
           <Link href="/finance">
-            <Card className={`cursor-pointer hover:shadow-md transition-shadow ${totalDue > 0 ? 'border-orange-200' : ''}`}>
-              <CardContent className="p-4">
+            <Card className={`cursor-pointer hover:shadow-md transition-shadow h-full ${totalDue > 0 ? 'border-orange-200' : ''}`}>
+              <CardContent className="p-3 md:p-4">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${totalDue > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
                   <IndianRupee className={`w-4 h-4 ${totalDue > 0 ? 'text-orange-500' : 'text-green-500'}`} />
                 </div>
-                <p className={`text-base font-bold ${totalDue > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                <p className={`text-sm font-bold ${totalDue > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                   {totalDue > 0 ? formatCurrency(totalDue) : 'All clear!'}
                 </p>
                 <p className="text-xs text-gray-500">{totalDue > 0 ? 'Amount due' : 'No dues'}</p>
@@ -106,34 +106,34 @@ export default function HomePage() {
             </Card>
           </Link>
           <Link href="/complaints">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
+            <Card className="cursor-pointer hover:shadow-md transition-shadow h-full">
+              <CardContent className="p-3 md:p-4">
                 <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-2">
                   <MessageSquare className="w-4 h-4 text-blue-500" />
                 </div>
-                <p className="text-base font-bold text-gray-900">Complaints</p>
+                <p className="text-sm font-bold text-gray-900">Complaints</p>
                 <p className="text-xs text-gray-500">Raise an issue</p>
               </CardContent>
             </Card>
           </Link>
           <Link href="/outpass">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
+            <Card className="cursor-pointer hover:shadow-md transition-shadow h-full">
+              <CardContent className="p-3 md:p-4">
                 <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center mb-2">
                   <DoorOpen className="w-4 h-4 text-purple-500" />
                 </div>
-                <p className="text-base font-bold text-gray-900">Outpass</p>
+                <p className="text-sm font-bold text-gray-900">Outpass</p>
                 <p className="text-xs text-gray-500">Request leave</p>
               </CardContent>
             </Card>
           </Link>
           <Link href="/food">
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
+            <Card className="cursor-pointer hover:shadow-md transition-shadow h-full">
+              <CardContent className="p-3 md:p-4">
                 <div className="w-9 h-9 bg-yellow-50 rounded-xl flex items-center justify-center mb-2">
                   <UtensilsCrossed className="w-4 h-4 text-yellow-500" />
                 </div>
-                <p className="text-base font-bold text-gray-900">Food Menu</p>
+                <p className="text-sm font-bold text-gray-900">Food Menu</p>
                 <p className="text-xs text-gray-500">Today's meals</p>
               </CardContent>
             </Card>
@@ -160,7 +160,7 @@ export default function HomePage() {
                 </div>
               ))}
               {foodData?.timings && (
-                <div className="pt-2 border-t grid grid-cols-4 gap-1 text-center">
+                <div className="pt-2 border-t grid grid-cols-2 sm:grid-cols-4 gap-1 text-center">
                   {[
                     { label: 'Breakfast', start: foodData.timings.breakfastStart, end: foodData.timings.breakfastEnd },
                     { label: 'Lunch', start: foodData.timings.lunchStart, end: foodData.timings.lunchEnd },
@@ -204,7 +204,7 @@ export default function HomePage() {
             </CardContent>
           </Card>
         )}
-      </div>
+      </div>{/* end max-w-lg */}
     </div>
   )
 }

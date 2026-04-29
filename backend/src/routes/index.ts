@@ -20,10 +20,6 @@ import { cashfreeWebhook } from '../controllers/payment.controller'
 import { renewalRouter } from './renewal.routes'
 import { semesterRouter } from './semester.routes'
 import { activityLogMiddleware } from '../middleware/activityLog.middleware'
-import { requireAdmin } from '../middleware/role.middleware'
-import { getActivityLogs } from '../services/activityLog.service'
-import { getPaginationParams } from '../utils/pagination'
-import { Request, Response, NextFunction } from 'express'
 import { verifyQr } from '../controllers/student.controller'
 import { downloadReceipt } from '../controllers/finance.controller'
 
@@ -62,16 +58,3 @@ router.use('/settings', settingsRouter)
 router.use('/portal', portalRouter)
 router.use('/renewals', renewalRouter)
 router.use('/semesters', semesterRouter)
-
-// ─── Dedicated activity log route ────────────────────────
-router.get('/activity', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { page, limit } = getPaginationParams(req.query)
-    const { action, startDate, endDate } = req.query as Record<string, string>
-    const result = await getActivityLogs({
-      page, limit,
-      action: action || undefined,
-    })
-    res.json({ success: true, ...result })
-  } catch (err) { next(err) }
-})

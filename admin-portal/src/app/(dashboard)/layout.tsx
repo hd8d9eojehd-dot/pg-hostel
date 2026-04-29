@@ -26,11 +26,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!isAuthenticated) return null
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <aside className="hidden md:flex w-64 flex-shrink-0 flex-col border-r h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden bg-gray-50">
+      <aside className="hidden md:block w-64 flex-shrink-0 border-r bg-white h-[100dvh] overflow-hidden fixed left-0 top-0 bottom-0 z-30">
         <Sidebar />
       </aside>
-      <main className="flex-1 overflow-y-auto min-w-0">
+      <main className="flex-1 overflow-y-auto min-w-0 md:ml-64">
         {children}
       </main>
     </div>

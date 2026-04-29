@@ -26,6 +26,7 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 239 84% 67%;
     --radius: 0.75rem;
+    --sidebar-width: 16rem;
   }
 
   .dark {
@@ -52,15 +53,96 @@
 }
 
 @layer base {
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground font-sans antialiased; }
+  *, *::before, *::after {
+    box-sizing: border-box;
+    @apply border-border;
+  }
+
+  html {
+    /* Prevent horizontal overflow globally */
+    overflow-x: hidden;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    /* Better text rendering */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    /* Prevent horizontal scroll */
+    overflow-x: hidden;
+    /* Minimum width to prevent extreme compression */
+    min-width: 320px;
+  }
+
+  /* Prevent iOS input zoom — all inputs must be >= 16px */
+  input, select, textarea {
+    font-size: 16px;
+  }
+
+  /* Override for small labels that use text-sm (14px) — only on desktop */
+  @media (min-width: 768px) {
+    input, select, textarea {
+      font-size: inherit;
+    }
+  }
+
+  /* Remove tap highlight on mobile */
+  a, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Minimum touch targets — only on mobile, not desktop where precise clicking is fine */
+  @media (max-width: 767px) {
+    button:not(.no-touch-target), a:not(.no-touch-target), [role="button"]:not(.no-touch-target) {
+      min-height: 44px;
+    }
+  }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-muted; }
-::-webkit-scrollbar-thumb { @apply bg-muted-foreground/30 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/50; }
+/* Custom scrollbar — only on desktop */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-muted; }
+  ::-webkit-scrollbar-thumb { @apply bg-muted-foreground/30 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/50; }
+}
 
-/* Smooth transitions */
-* { transition-property: color, background-color, border-color, box-shadow; transition-duration: 150ms; }
+/* Targeted transitions — not on * to avoid performance issues */
+a, button, input, select, textarea, [class*="transition"] {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Admin layout — fix iOS Safari 100vh issue */
+.admin-layout {
+  height: 100dvh; /* dynamic viewport height — fixes iOS toolbar */
+  height: 100vh; /* fallback */
+}
+
+/* Responsive table wrapper */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
+
+/* Safe area support for notched devices */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Hide scrollbar utility — for horizontal scroll containers */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

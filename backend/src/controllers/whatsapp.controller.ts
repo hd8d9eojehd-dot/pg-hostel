@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { sendWhatsAppMessage, sendBulkWhatsApp } from '../services/whatsapp.service'
-import { isWhatsAppReady } from '../config/whatsapp'
+import { isWhatsAppReady, getQrCode } from '../config/whatsapp'
 import { prisma } from '../config/prisma'
 import { getPaginationParams, getPaginationMeta, getSkip } from '../utils/pagination'
 
@@ -58,7 +58,15 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 }
 
 export async function getWhatsAppStatus(_req: Request, res: Response): Promise<void> {
-  res.json({ success: true, data: { ready: isWhatsAppReady() } })
+  const qr = getQrCode()
+  res.json({
+    success: true,
+    data: {
+      ready: isWhatsAppReady(),
+      qrAvailable: !!qr,
+      qr: qr ?? null,          // raw QR string — frontend renders it
+    },
+  })
 }
 
 export async function getWhatsAppLogs(req: Request, res: Response, next: NextFunction): Promise<void> {

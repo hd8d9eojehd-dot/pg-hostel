@@ -25,12 +25,24 @@ export function toUTC(istDate: Date): Date {
 
 export function stayEndDate(
   joinDate: Date,
-  duration: '3months' | '6months' | '1year'
+  duration: string
 ): Date {
   const ist = toZonedTime(joinDate, TZ)
+
+  // Handle legacy fixed values
   if (duration === '3months') return addMonths(ist, 3)
   if (duration === '6months') return addMonths(ist, 6)
-  return addYears(ist, 1)
+  if (duration === '1year') return addYears(ist, 1)
+
+  // Handle free-form: e.g. "12months", "18months", "2years"
+  const monthsMatch = duration.match(/^(\d+)months?$/)
+  if (monthsMatch) return addMonths(ist, parseInt(monthsMatch[1], 10))
+
+  const yearsMatch = duration.match(/^(\d+)years?$/)
+  if (yearsMatch) return addYears(ist, parseInt(yearsMatch[1], 10))
+
+  // Default fallback: 12 months
+  return addMonths(ist, 12)
 }
 
 export function isDueSoon(dueDate: Date, days: number): boolean {

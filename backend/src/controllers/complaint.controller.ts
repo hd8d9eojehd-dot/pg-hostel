@@ -110,8 +110,15 @@ export async function updateComplaint(req: Request, res: Response, next: NextFun
 
     // Notify student on resolve
     if (input.status === 'resolved' && updated.student) {
+      // Fetch student ID for context
+      const studentFull = await prisma.student.findUnique({
+        where: { id: updated.studentId },
+        select: { id: true, studentId: true },
+      })
       notifyComplaintResolved({
+        studentDbId: updated.studentId,
         studentName: updated.student.name,
+        studentId: studentFull?.studentId ?? updated.studentId,
         mobile: updated.student.mobile,
         complaintNumber: updated.complaintNumber,
         category: updated.category,

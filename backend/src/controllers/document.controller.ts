@@ -41,6 +41,21 @@ export async function uploadAvatar(req: Request, res: Response, next: NextFuncti
 
     if (uploadRes.ok) {
       publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
+      // Verify the public URL is accessible (bucket might not be public)
+      try {
+        const checkRes = await fetch(publicUrl, { method: 'HEAD' })
+        if (!checkRes.ok) {
+          // Bucket is not public — use signed URL instead (1 year expiry)
+          const { data: signedData, error: signedErr } = await supabaseAdmin.storage
+            .from(bucket)
+            .createSignedUrl(path, 365 * 24 * 3600)
+          if (!signedErr && signedData?.signedUrl) {
+            publicUrl = signedData.signedUrl
+          }
+        }
+      } catch {
+        // Keep the public URL as-is if check fails
+      }
     } else {
       // Fallback: store as data URL in DB
       publicUrl = `data:${mimeType ?? 'image/jpeg'};base64,${fileBase64}`

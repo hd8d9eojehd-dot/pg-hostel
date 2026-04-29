@@ -3,7 +3,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CreateStudentSchema, type CreateStudentInput, STAY_DURATION, RENT_PACKAGE } from '@pg-hostel/shared'
+import { CreateStudentSchema, type CreateStudentInput, RENT_PACKAGE } from '@pg-hostel/shared'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -18,11 +18,7 @@ import { ArrowLeft, Loader2, UserPlus, Camera, Copy, Eye, EyeOff, CheckCircle2, 
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 
-const PAYMENT_MODES = [
-  { value: 'cash', label: '💵 Cash', desc: 'Collect cash at counter' },
-  { value: 'semi_offline', label: '📱 UPI / Bank Transfer', desc: 'Student pays to owner UPI, enter reference' },
-  { value: 'online', label: '🌐 Online (Cashfree)', desc: 'Redirect to payment gateway' },
-] as const
+const DEPOSIT_AMOUNT = 5000
 
 function calcFeePerSem(rentPackage: string, room: { monthlyRent?: number; semesterRent?: number; annualRent?: number } | null): number {
   if (!room) return 0
@@ -38,11 +34,11 @@ export default function NewStudentPage() {
   const [selectedRoomId, setSelectedRoomId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'semi_offline' | 'online'>('cash')
-  const [transactionRef, setTransactionRef] = useState('')
+  const [skipPayment, setSkipPayment] = useState(false)
+  const [customAmount, setCustomAmount] = useState<string>('')
   const [successData, setSuccessData] = useState<{
     student: { id: string; name: string; studentId: string }
-    tempPassword: string
+    password: string
     receiptNumber?: string
     invoice?: { totalAmount: number; type: string }
   } | null>(null)
@@ -51,13 +47,16 @@ export default function NewStudentPage() {
 
   const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<CreateStudentInput>({
     resolver: zodResolver(CreateStudentSchema),
-    defaultValues: { stayDuration: '6months', rentPackage: 'semester', depositAmount: 5000, yearOfStudy: 1, semester: 1, totalSemesters: 8 },
+    defaultValues: { stayDuration: '12months', rentPackage: 'semester', depositAmount: DEPOSIT_AMOUNT, yearOfStudy: 1, semester: 1, totalSemesters: 8 },
   })
 
   const rentPackage = watch('rentPackage')
+  const yearOfStudy = watch('yearOfStudy') ?? 1
   const currentSemester = watch('semester') ?? 1
-  const depositAmount = watch('depositAmount') ?? 0
+  const depositAmount = watch('depositAmount') ?? DEPOSIT_AMOUNT
   const totalSemesters = watch('totalSemesters') ?? 8
+
+  // Auto-match: year 0→0 sems, year 1→2 sems, year 2→4 sems, etc.
 
   const { data: rooms } = useQuery({
     queryKey: ['rooms-available'],
@@ -70,7 +69,10 @@ export default function NewStudentPage() {
   const remainingSems = Math.max(0, totalSemesters - currentSemester + 1)
   const totalCourseFee = feePerSem * totalSemesters
   const remainingFee = feePerSem * remainingSems
-  const paidSems = currentSemester - 1
+
+  // Total to collect = sem fee + deposit
+  const totalToCollect = feePerSem + Number(depositAmount)
+  const effectiveAmount = customAmount !== '' ? Number(customAmount) : totalToCollect
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -85,13 +87,17 @@ export default function NewStudentPage() {
   const admit = useMutation({
     mutationFn: async (data: CreateStudentInput) => {
       // First create the student WITHOUT avatar
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...data,
         avatarUrl: undefined,
-        initialPayment: {
-          paymentMode,
-          transactionRef: paymentMode === 'semi_offline' ? transactionRef : undefined,
-        },
+      }
+
+      // Only include initialPayment if not skipping
+      if (!skipPayment) {
+        payload['initialPayment'] = {
+          paymentMode: 'cash',
+          customAmount: effectiveAmount,
+        }
       }
 
       const res = await api.post('/students', payload)
@@ -153,7 +159,7 @@ export default function NewStudentPage() {
   return (
     <div>
       <Header title="Admit Student" />
-      <div className="p-4 md:p-6 max-w-3xl">
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
         <Link href="/students">
           <Button variant="ghost" size="sm" className="gap-1.5 mb-4"><ArrowLeft className="w-4 h-4" /> Back</Button>
         </Link>
@@ -257,10 +263,25 @@ export default function NewStudentPage() {
               <F label="College" name="college" placeholder="Pune University" required />
               <F label="Course" name="course" placeholder="B.Tech" required />
               <F label="Branch" name="branch" placeholder="Computer Science" required />
-              <F label="Year of Study" name="yearOfStudy" type="number" required />
+              <div className="space-y-1.5">
+                <Label>Year of Study <span className="text-destructive">*</span></Label>
+                <Input type="number" min={0} max={6}
+                  {...register('yearOfStudy', { valueAsNumber: true })}
+                  onChange={e => {
+                    const yr = parseInt(e.target.value, 10) || 0
+                    setValue('yearOfStudy', yr)
+                    // Auto-set: totalSemesters = year * 2, currentSem = year * 2 - 1 (first sem of that year)
+                    const totalSems = yr * 2
+                    const currentSem = Math.max(1, yr * 2 - 1)
+                    setValue('totalSemesters', totalSems || 8)
+                    setValue('semester', currentSem)
+                  }}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Current Semester <span className="text-destructive">*</span></Label>
                 <Input type="number" min={1} max={12} {...register('semester', { valueAsNumber: true })} />
+                <p className="text-xs text-gray-400">Auto-set from year (Year {yearOfStudy} → Sem {Math.max(1, yearOfStudy * 2 - 1)}). Can be changed.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Total Semesters in Course</Label>
@@ -270,7 +291,7 @@ export default function NewStudentPage() {
             </CardContent>
           </Card>
 
-          {/* Stay Info */}
+          {/* Stay Info — no stay duration */}
           <Card>
             <CardHeader><CardTitle className="text-base">🏠 Stay Details</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-4">
@@ -278,12 +299,6 @@ export default function NewStudentPage() {
                 <Label>Joining Date <span className="text-destructive">*</span></Label>
                 <Input type="date" {...register('joiningDate')} className={errors.joiningDate ? 'border-destructive' : ''} />
                 {errors.joiningDate && <p className="text-xs text-destructive">{errors.joiningDate.message}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label>Stay Duration <span className="text-destructive">*</span></Label>
-                <select {...register('stayDuration')} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                  {STAY_DURATION.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
               </div>
               <div className="space-y-1.5">
                 <Label>Rent Package <span className="text-destructive">*</span></Label>
@@ -409,39 +424,58 @@ export default function NewStudentPage() {
             <CardHeader><CardTitle className="text-base">💳 First Semester Fee Payment</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {selectedRoom && feePerSem > 0 && (
-                <div className="p-3 bg-indigo-50 rounded-xl text-sm text-indigo-800">
-                  Collecting: <strong>{formatCurrency(feePerSem)}</strong> for Semester {currentSemester}
+                <div className="p-3 bg-indigo-50 rounded-xl text-sm text-indigo-800 space-y-1">
+                  <p>Sem {currentSemester} fee: <strong>{formatCurrency(feePerSem)}</strong></p>
+                  <p>Security deposit: <strong>{formatCurrency(Number(depositAmount))}</strong></p>
+                  <p className="font-bold text-indigo-900 border-t border-indigo-200 pt-1 mt-1">
+                    Total to collect: <strong>{formatCurrency(totalToCollect)}</strong>
+                  </p>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-3">
-                {PAYMENT_MODES.map(mode => (
-                  <label key={mode.value} className="cursor-pointer">
-                    <input type="radio" name="paymentMode" value={mode.value} checked={paymentMode === mode.value}
-                      onChange={() => setPaymentMode(mode.value)} className="sr-only" />
-                    <div className={`p-3 rounded-xl border-2 transition-colors text-center ${paymentMode === mode.value ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <p className="text-sm font-medium">{mode.label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{mode.desc}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
 
-              {paymentMode === 'semi_offline' && (
-                <div className="space-y-1.5">
-                  <Label>Transaction Reference / UTR <span className="text-destructive">*</span></Label>
-                  <Input value={transactionRef} onChange={e => setTransactionRef(e.target.value)}
-                    placeholder="UPI transaction ID or UTR number" />
+              {/* Skip payment checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={skipPayment}
+                  onChange={e => setSkipPayment(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Skip fee payment now (show as due amount)</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Invoice will be created with status &apos;due&apos;. Student can pay later.</p>
                 </div>
-              )}
-              {paymentMode === 'online' && (
-                <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
-                  ℹ️ After student is created, you'll be redirected to Cashfree payment gateway.
+              </label>
+
+              {skipPayment ? (
+                <div className="p-3 bg-yellow-50 rounded-xl text-sm text-yellow-800">
+                  ⏳ First semester fee of <strong>{formatCurrency(feePerSem)}</strong> will be shown as due amount. Invoice will be created automatically.
                 </div>
-              )}
-              {paymentMode === 'cash' && (
-                <div className="p-3 bg-green-50 rounded-xl text-sm text-green-700">
-                  ✓ Cash payment will be recorded immediately. Receipt generated automatically.
-                </div>
+              ) : (
+                <>
+                  {/* Custom amount override */}
+                  <div className="space-y-1.5">
+                    <Label>Custom Amount (₹) <span className="text-xs text-gray-400">optional — default = sem fee + deposit</span></Label>
+                    <Input
+                      type="number"
+                      value={customAmount}
+                      onChange={e => setCustomAmount(e.target.value)}
+                      placeholder={String(totalToCollect)}
+                      min={1}
+                    />
+                    {customAmount !== '' && Number(customAmount) !== totalToCollect && (
+                      <p className="text-xs text-orange-600">
+                        Custom amount: {formatCurrency(Number(customAmount))} (default: {formatCurrency(totalToCollect)})
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Cash only */}
+                  <div className="p-3 bg-green-50 rounded-xl border-2 border-green-200">
+                    <p className="text-sm font-semibold text-green-800">💵 Cash Payment</p>
+                    <p className="text-xs text-green-700 mt-0.5">Cash payment will be recorded immediately. Receipt generated automatically.</p>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -480,17 +514,18 @@ export default function NewStudentPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Temp Password</span>
+                  <span className="text-xs text-gray-500">Password</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold">{showPassword ? successData.tempPassword : '••••••••'}</span>
+                    <span className="font-mono text-sm font-bold">{showPassword ? successData.password : '••••••••'}</span>
                     <button onClick={() => setShowPassword(!showPassword)} className="text-gray-400 hover:text-primary">
                       {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
-                    <button onClick={() => navigator.clipboard.writeText(successData.tempPassword)} className="text-gray-400 hover:text-primary">
+                    <button onClick={() => navigator.clipboard.writeText(successData.password)} className="text-gray-400 hover:text-primary">
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
+                <p className="text-xs text-gray-400">Password = Student ID. Student can change anytime.</p>
               </div>
               {successData.receiptNumber && (
                 <div className="p-3 bg-blue-50 rounded-xl text-sm">

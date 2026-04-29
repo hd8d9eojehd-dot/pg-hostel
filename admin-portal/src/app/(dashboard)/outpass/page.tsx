@@ -40,14 +40,14 @@ export default function OutpassPage() {
     <div>
       <Header title="Outpass Management" />
       <div className="p-4 md:p-6 space-y-4">
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
           {['pending', 'approved', 'rejected', 'returned', ''].map(s => (
-            <Button key={s} variant={status === s ? 'default' : 'outline'} size="sm" onClick={() => setStatus(s)}>
+            <Button key={s} variant={status === s ? 'default' : 'outline'} size="sm" className="flex-shrink-0" onClick={() => setStatus(s)}>
               {s || 'All'}
             </Button>
           ))}
-          <Link href="/outpass/semesters" className="ml-auto">
-            <Button variant="outline" size="sm" className="gap-1.5">📅 Semester Periods</Button>
+          <Link href="/outpass/semesters" className="ml-auto flex-shrink-0">
+            <Button variant="outline" size="sm" className="gap-1.5 whitespace-nowrap">📅 Semester Periods</Button>
           </Link>
         </div>
 

@@ -2,5 +2,6 @@
   "framework": "nextjs",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "alias": ["south-pg-admin.vercel.app"]
 }

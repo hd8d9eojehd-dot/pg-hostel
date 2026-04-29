@@ -4,6 +4,7 @@ import {
   getHomeData, getMyProfile, getMyInvoices, getMyComplaints,
   getMyOutpasses, getPublishedNotices, getMyFoodMenu, getChildInfo,
   submitPaymentRequest, getMyFeeStructure, createSemInvoice, getMyPendingPayments,
+  getPaymentDetails,
 } from '../controllers/portal.controller'
 import { getIdCardData } from '../controllers/student.controller'
 
@@ -22,6 +23,7 @@ portalRouter.get('/food', requireRole('student'), getMyFoodMenu)
 portalRouter.post('/payment-request', requireRole('student'), submitPaymentRequest)
 portalRouter.post('/create-sem-invoice', requireRole('student'), createSemInvoice)
 portalRouter.get('/my-payments', requireRole('student'), getMyPendingPayments)
+portalRouter.get('/payment-details', requireRole('student'), getPaymentDetails)
 
 // ─── Parent routes ────────────────────────────────────────
 portalRouter.get('/child', requireRole('parent'), getChildInfo)

@@ -3,7 +3,6 @@ import { supabaseAdmin } from '../config/supabase'
 import { generateStudentId, generateInvoiceNumber, generateReceiptNumber } from '../utils/studentId'
 import { stayEndDate, todayIST } from '../utils/indianTime'
 import { startOfDay } from 'date-fns'
-import { generateTempPassword } from '../utils/hash'
 import { ApiError } from '../middleware/error.middleware'
 import type {
   CreateStudentInput, UpdateStudentInput, ShiftRoomInput,
@@ -21,16 +20,18 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
   if (bed.isOccupied) throw new ApiError(409, 'Bed is already occupied')
   if (bed.roomId !== input.roomId) throw new ApiError(400, 'Bed does not belong to specified room')
 
-  const tempPassword = generateTempPassword()
   const joinDate = new Date(input.joiningDate)
   const studentId = await generateStudentId(joinDate)
   const endDate = stayEndDate(joinDate, input.stayDuration)
+
+  // Password = studentId (e.g. PG-2026-4821) — no temp password, no forced change
+  const initialPassword = studentId
 
   // Create Supabase auth user
   const email = input.email ?? `${studentId.toLowerCase()}@pg-hostel.local`
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email,
-    password: tempPassword,
+    password: initialPassword,
     email_confirm: true,
     user_metadata: { studentId, name: input.name, role: 'student' },
   })
@@ -70,7 +71,7 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
         notes: input.notes,
         avatarUrl: input.avatarUrl,
         status: 'active',
-        isFirstLogin: true,
+        isFirstLogin: false,
         createdBy: adminId,
       },
       include: {
@@ -114,41 +115,50 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
     return s
   })
 
-  // Handle initial payment if provided
+  // ALWAYS create the invoice for the first semester (whether or not payment is provided)
   let invoice = null
   let payment = null
   let receiptNumber = null
 
-  if (input.initialPayment) {
-    const { paymentMode, transactionRef } = input.initialPayment
-    const room = student.room
-    const branch = room?.branch
+  const room = student.room
 
-    // Calculate first period fee
-    let feeAmount = 0
-    if (input.rentPackage === 'semester') feeAmount = Number(room?.semesterRent ?? 0)
-    else if (input.rentPackage === 'monthly') feeAmount = Number(room?.monthlyRent ?? 0) * 6
-    else if (input.rentPackage === 'annual') feeAmount = Number(room?.annualRent ?? 0)
+  // Calculate first period fee
+  let feeAmount = 0
+  if (input.rentPackage === 'semester') feeAmount = Number(room?.semesterRent ?? 0)
+  else if (input.rentPackage === 'monthly') feeAmount = Number(room?.monthlyRent ?? 0) * 6
+  else if (input.rentPackage === 'annual') feeAmount = Number(room?.annualRent ?? 0)
 
-    if (feeAmount > 0) {
-      const invoiceNumber = await generateInvoiceNumber()
-      const dueDate = new Date(joinDate)
-      dueDate.setDate(dueDate.getDate() + 7)
+  if (feeAmount > 0) {
+    const invoiceNumber = await generateInvoiceNumber()
+    const dueDate = new Date(joinDate)
+    dueDate.setDate(dueDate.getDate() + 7)
 
-      invoice = await prisma.invoice.create({
-        data: {
-          studentId: student.id,
-          invoiceNumber,
-          type: 'rent',
-          description: `First ${input.rentPackage} fee — ${input.rentPackage === 'semester' ? `Sem ${input.semester}` : 'Period 1'}`,
-          amount: feeAmount,
-          totalAmount: feeAmount,
-          balance: feeAmount,
-          dueDate,
-          generatedBy: adminId,
-          status: 'due',
-        },
-      })
+    // If initial payment is provided, include deposit in the invoice total
+    // If skipping payment, ALSO include deposit in the due amount
+    const depositAmt = Number(input.depositAmount ?? 0)
+    const totalInvoiceAmount = feeAmount + depositAmt
+    const invoiceDescription = `First ${input.rentPackage} fee + Security deposit (₹${depositAmt}) — Sem ${input.semester}`
+
+    invoice = await prisma.invoice.create({
+      data: {
+        studentId: student.id,
+        invoiceNumber,
+        type: 'rent',
+        description: invoiceDescription,
+        amount: totalInvoiceAmount,
+        totalAmount: totalInvoiceAmount,
+        balance: totalInvoiceAmount,
+        dueDate,
+        generatedBy: adminId,
+        status: 'due',
+        // Store semester number for tracking
+        semesterNumber: input.semester,
+      },
+    })
+
+    // Only record payment if initialPayment is provided
+    if (input.initialPayment) {
+      const { paymentMode, transactionRef } = input.initialPayment
 
       if (paymentMode === 'cash' || paymentMode === 'semi_offline') {
         receiptNumber = await generateReceiptNumber()
@@ -158,17 +168,17 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
               invoiceId: invoice!.id,
               studentId: student.id,
               receiptNumber: receiptNumber!,
-              amount: feeAmount,
+              amount: totalInvoiceAmount,
               paymentMode: paymentMode === 'semi_offline' ? 'bank_transfer' : 'cash',
               transactionRef: transactionRef,
               paidDate: joinDate,
               recordedBy: adminId,
-              notes: `Initial payment at admission — ${paymentMode}`,
+              notes: `Initial payment at admission — ${paymentMode}${depositAmt > 0 ? ` (includes ₹${depositAmt} deposit)` : ''}`,
             },
           })
           await tx.invoice.update({
             where: { id: invoice!.id },
-            data: { paidAmount: feeAmount, balance: 0, status: 'paid' },
+            data: { paidAmount: totalInvoiceAmount, balance: 0, status: 'paid' },
           })
           return p
         })
@@ -176,7 +186,7 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
     }
   }
 
-  return { student, tempPassword, invoice, payment, receiptNumber }
+  return { student, password: initialPassword, invoice, payment, receiptNumber }
 }
 
 export async function deleteStudent(id: string, input: DeleteStudentInput, adminId: string) {
@@ -237,9 +247,15 @@ export async function deleteStudent(id: string, input: DeleteStudentInput, admin
     })
   })
 
-  // Delete Supabase auth user
+  // Delete Supabase auth user — must succeed for security
   if (student.supabaseAuthId) {
-    await supabaseAdmin.auth.admin.deleteUser(student.supabaseAuthId).catch(() => {})
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(student.supabaseAuthId)
+    if (authDeleteError) {
+      // Log but don't fail — DB record is already deleted, Supabase cleanup is best-effort
+      // The auth middleware will reject any future login attempts since DB record is gone
+      const { logger } = await import('../utils/logger')
+      logger.warn(`Supabase user deletion failed for ${student.studentId}: ${authDeleteError.message}`)
+    }
   }
 
   return { deleted: true, outstandingBalance }
@@ -363,12 +379,14 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
   const { notifyAdmission } = await import('./notification.service')
   const bed = await prisma.bed.findUnique({ where: { id: input.bedId } })
   notifyAdmission({
+    studentDbId: student.id,
     studentName: student.name,
     studentId: student.studentId,
     mobile: student.mobile,
-    tempPassword: '(use existing password)',
+    password: student.studentId,
     roomNumber: newRoom?.roomNumber ?? '',
     bedLabel: bed?.bedLabel ?? '',
+    branchId: newRoom?.branchId ?? undefined,
   }).catch(() => {})
 
   return { student: await prisma.student.findUnique({ where: { id } }), invoice }

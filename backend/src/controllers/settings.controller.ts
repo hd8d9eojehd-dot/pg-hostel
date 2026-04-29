@@ -100,3 +100,25 @@ export async function updateAdminEmail(req: Request, res: Response, next: NextFu
     res.json({ success: true, data: updated, message: 'Email updated successfully' })
   } catch (err) { next(err) }
 }
+
+// Update UPI/Bank payment details for student portal payments
+export async function updatePaymentDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const branchId = req.body.branchId ?? req.user?.branchId
+    if (!branchId) throw new ApiError(400, 'branchId required')
+    const { upiId, upiQrUrl, bankAccountName, bankAccountNumber, bankIfsc, bankName } = req.body as {
+      upiId?: string; upiQrUrl?: string
+      bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankName?: string
+    }
+    // Store in settings.staffPermissions JSON as paymentDetails (reusing existing JSON field)
+    const existing = await prisma.settings.findUnique({ where: { branchId }, select: { staffPermissions: true } })
+    const currentPerms = (existing?.staffPermissions as Record<string, unknown>) ?? {}
+    const paymentDetails = { upiId, upiQrUrl, bankAccountName, bankAccountNumber, bankIfsc, bankName }
+    const settings = await prisma.settings.upsert({
+      where: { branchId },
+      create: { branchId, staffPermissions: { ...currentPerms, paymentDetails } },
+      update: { staffPermissions: { ...currentPerms, paymentDetails } },
+    })
+    res.json({ success: true, data: settings, message: 'Payment details updated' })
+  } catch (err) { next(err) }
+}

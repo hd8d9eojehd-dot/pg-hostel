@@ -60,7 +60,7 @@ function NewInvoiceForm() {
   return (
     <div>
       <Header title="New Invoice" />
-      <div className="p-4 md:p-6 max-w-xl">
+      <div className="p-4 md:p-6 max-w-xl mx-auto">
         <Link href={prefilledStudentId ? `/students/${prefilledStudentId}` : '/finance'}>
           <Button variant="ghost" size="sm" className="gap-1.5 mb-4">
             <ArrowLeft className="w-4 h-4" /> Back
@@ -94,7 +94,7 @@ function NewInvoiceForm() {
                 {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label>Amount (Rs.) <span className="text-destructive">*</span></Label>
                   <Input type="number" {...register('amount', { valueAsNumber: true })} placeholder="8000" className={errors.amount ? 'border-destructive' : ''} />

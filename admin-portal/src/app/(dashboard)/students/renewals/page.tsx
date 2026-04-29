@@ -32,14 +32,14 @@ export default function RenewalsPage() {
   return (
     <div>
       <Header title="Renewals & Exits" />
-      <div className="p-4 md:p-6 space-y-4 max-w-4xl">
+      <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
         <Link href="/students">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="w-4 h-4" /> Students
           </Button>
         </Link>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {[
             { value: '', label: 'All' },
             { value: 'renewal', label: 'Renewals' },
@@ -49,7 +49,7 @@ export default function RenewalsPage() {
               {label}
             </Button>
           ))}
-          <select value={status} onChange={e => setStatus(e.target.value)} className="h-9 rounded-lg border border-input bg-background px-3 text-sm ml-auto">
+          <select value={status} onChange={e => setStatus(e.target.value)} className="h-9 rounded-lg border border-input bg-background px-3 text-sm sm:ml-auto">
             <option value="">All Status</option>
             <option value="pending">Pending</option>
             <option value="completed">Completed</option>

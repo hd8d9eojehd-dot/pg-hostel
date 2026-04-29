@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/error.middleware'
-import { sendBulkWhatsApp, templates } from '../services/whatsapp.service'
+import { sendBulkWhatsApp } from '../services/whatsapp.service'
+import { notifyNotice } from '../services/notification.service'
 import { formatIST } from '../utils/indianTime'
 import { env } from '../config/env'
 import { getPaginationParams, getPaginationMeta, getSkip } from '../utils/pagination'
@@ -100,28 +101,37 @@ export async function sendNoticeWhatsApp(req: Request, res: Response, next: Next
 
     const students = await prisma.student.findMany({
       where: { status: 'active' },
-      select: { mobile: true, parentMobile: true },
+      select: { id: true, mobile: true, room: { select: { branchId: true } } },
     })
 
-    const messages = students.map(s => ({
-      mobile: s.mobile,
-      message: templates.noticeAlert({
-        title: notice.title,
-        description: notice.description,
-        date: formatIST(notice.createdAt),
-        pgName: env.PG_NAME,
-      }),
-      templateName: 'NOTICE_ALERT',
-    }))
-
-    const result = await sendBulkWhatsApp(messages)
+    // Group by branchId so each student gets the right PG name
+    let sent = 0
+    let failed = 0
+    for (const student of students) {
+      try {
+        await notifyNotice({
+          studentDbId: student.id,
+          mobile: student.mobile,
+          title: notice.title,
+          description: notice.description,
+          date: notice.createdAt,
+          category: notice.category,
+          priority: notice.priority,
+          branchId: student.room?.branchId ?? undefined,
+        })
+        sent++
+        await new Promise(r => setTimeout(r, 2000)) // rate limit
+      } catch {
+        failed++
+      }
+    }
 
     await prisma.notice.update({
       where: { id: req.params['id']! },
       data: { whatsappSent: true, whatsappSentAt: new Date() },
     })
 
-    res.json({ success: true, message: `Sent to ${result.sent} students`, data: result })
+    res.json({ success: true, message: `Sent to ${sent} students`, data: { sent, failed } })
   } catch (err) {
     next(err)
   }

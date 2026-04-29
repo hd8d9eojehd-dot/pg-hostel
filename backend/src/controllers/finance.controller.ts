@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express'
 import * as financeService from '../services/finance.service'
 import { generateReceiptPdf } from '../services/pdf.service'
-import { notifyPaymentConfirmed } from '../services/notification.service'
+import {
+  notifyPaymentConfirmed,
+  notifyUtrVerified,
+  notifyUtrRejected,
+} from '../services/notification.service'
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/error.middleware'
 import { env } from '../config/env'
@@ -62,19 +66,27 @@ export async function recordPayment(req: Request, res: Response, next: NextFunct
   try {
     const payment = await financeService.recordPayment(req.body as RecordPaymentInput, req.user!.id)
 
-    // Notify student
+    // Notify student with full context
     const student = await prisma.student.findUnique({
       where: { id: (req.body as RecordPaymentInput).studentId },
-      select: { name: true, mobile: true },
+      select: { id: true, name: true, studentId: true, mobile: true },
+    })
+    // Fetch invoice description for context
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: (req.body as RecordPaymentInput).invoiceId },
+      select: { description: true, type: true },
     })
     if (student) {
       notifyPaymentConfirmed({
+        studentDbId: student.id,
         studentName: student.name,
+        studentId: student.studentId,
         mobile: student.mobile,
         amount: (req.body as RecordPaymentInput).amount,
         paymentMode: (req.body as RecordPaymentInput).paymentMode,
         receiptNumber: payment.receiptNumber,
         paidDate: payment.paidDate,
+        description: invoice?.description ?? invoice?.type,
       }).catch(() => { /* non-blocking */ })
     }
 
@@ -128,6 +140,11 @@ export async function downloadReceipt(req: Request, res: Response, next: NextFun
 
     if (!payment) throw new ApiError(404, 'Receipt not found')
 
+    // Only generate receipt for verified/completed payments — not pending UTR
+    if ((payment.paymentMode === 'upi' || payment.paymentMode === 'bank_transfer') && !payment.utrVerified) {
+      throw new ApiError(400, 'Receipt not available — payment is pending admin verification')
+    }
+
     const branch = payment.student.room?.branch
     const pgName = branch?.name ?? env.PG_NAME
     const pgAddress = branch ? `${branch.address}, ${branch.city ?? ''}, ${branch.state ?? ''}`.trim().replace(/,\s*$/, '') : 'India'
@@ -146,7 +163,7 @@ export async function downloadReceipt(req: Request, res: Response, next: NextFun
         transactionRef: payment.transactionRef ?? undefined,
         utrNumber: payment.transactionRef ?? undefined,
         paidDate: payment.paidDate,
-        invoiceDescription: payment.invoice.description ?? payment.invoice.type,
+        invoiceDescription: `${payment.invoice.description ?? payment.invoice.type} (${payment.invoice.invoiceNumber})`,
         balance: Number(payment.invoice.balance),
         lateFee: Number(payment.invoice.lateFee ?? 0),
         pgName,
@@ -253,8 +270,8 @@ export async function verifyUtrPayment(req: Request, res: Response, next: NextFu
     const payment = await prisma.payment.findUnique({
       where: { id },
       include: {
-        invoice: { select: { id: true, totalAmount: true, paidAmount: true, balance: true } },
-        student: { select: { name: true, mobile: true, studentId: true } },
+        invoice: { select: { id: true, totalAmount: true, paidAmount: true, balance: true, description: true, type: true } },
+        student: { select: { id: true, name: true, mobile: true, studentId: true } },
       },
     })
     if (!payment) throw new ApiError(404, 'Payment not found')
@@ -287,12 +304,17 @@ export async function verifyUtrPayment(req: Request, res: Response, next: NextFu
       })
     })
 
-    // Notify student via WhatsApp
-    const { sendWhatsAppMessage } = await import('../config/whatsapp')
-    sendWhatsAppMessage(
-      payment.student.mobile,
-      `✅ *Payment Verified!*\n\nYour payment of ₹${Number(payment.amount).toLocaleString('en-IN')} has been verified.\nUTR: ${payment.transactionRef}\nReceipt: ${payment.receiptNumber}\n\nThank you! 🙏`
-    ).catch(() => {})
+    // Notify student via WhatsApp with full context
+    notifyUtrVerified({
+      studentDbId: payment.student.id ?? payment.studentId,
+      studentName: payment.student.name,
+      studentId: payment.student.studentId,
+      mobile: payment.student.mobile,
+      amount: Number(payment.amount),
+      utr: payment.transactionRef ?? '',
+      receiptNumber: payment.receiptNumber,
+      description: payment.invoice?.description ?? payment.invoice?.type,
+    }).catch(() => {})
 
     res.json({ success: true, message: 'Payment verified successfully', data: { receiptNumber: payment.receiptNumber } })
   } catch (err) { next(err) }
@@ -309,7 +331,7 @@ export async function rejectUtrPayment(req: Request, res: Response, next: NextFu
       where: { id },
       include: {
         invoice: { select: { id: true, paidAmount: true, totalAmount: true } },
-        student: { select: { name: true, mobile: true, studentId: true } },
+        student: { select: { id: true, name: true, mobile: true, studentId: true } },
       },
     })
     if (!payment) throw new ApiError(404, 'Payment not found')
@@ -342,12 +364,16 @@ export async function rejectUtrPayment(req: Request, res: Response, next: NextFu
       })
     })
 
-    // Notify student via WhatsApp
-    const { sendWhatsAppMessage } = await import('../config/whatsapp')
-    sendWhatsAppMessage(
-      payment.student.mobile,
-      `❌ *Payment Rejected*\n\nYour payment submission (UTR: ${payment.transactionRef}) has been rejected.\n\nReason: ${reason}\n\nPlease contact admin or resubmit with correct UTR.`
-    ).catch(() => {})
+    // Notify student via WhatsApp with full context
+    notifyUtrRejected({
+      studentDbId: payment.student.id ?? payment.studentId,
+      studentName: payment.student.name,
+      studentId: payment.student.studentId,
+      mobile: payment.student.mobile,
+      amount: Number(payment.amount),
+      utr: payment.transactionRef ?? '',
+      reason,
+    }).catch(() => {})
 
     res.json({ success: true, message: 'Payment rejected and invoice restored' })
   } catch (err) { next(err) }
