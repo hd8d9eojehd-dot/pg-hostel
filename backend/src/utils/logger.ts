@@ -7,6 +7,7 @@ const devFormat = printf(({ level, message, timestamp: ts, ...meta }) => {
   return `${ts} [${level}]: ${message}${metaStr}`
 })
 
+// Always use console-only transport (works on Vercel serverless)
 export const logger = winston.createLogger({
   level: process.env['NODE_ENV'] === 'production' ? 'info' : 'debug',
   format: combine(timestamp({ format: 'YYYY-MM-DD HH:mm:ss' })),
@@ -20,19 +21,3 @@ export const logger = winston.createLogger({
     }),
   ],
 })
-
-if (process.env['NODE_ENV'] === 'production') {
-  logger.add(
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      format: combine(timestamp(), json()),
-    })
-  )
-  logger.add(
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      format: combine(timestamp(), json()),
-    })
-  )
-}
