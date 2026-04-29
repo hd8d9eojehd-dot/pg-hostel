@@ -582,33 +582,9 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
           notes: 'PENDING_VERIFICATION - submitted by student via portal',
         },
       })
-      const newPaid = Math.min(amount, Number(invoice.balance))
-      const newBalance = Math.max(0, Number(invoice.balance) - newPaid)
-      await tx.invoice.update({
-        where: { id: targetInvoiceId! },
-        data: { paidAmount: { increment: newPaid }, balance: newBalance, status: 'partial', updatedAt: new Date() },
-      })
-
-      // Overpayment: carry excess to next semester invoice
-      const excess = amount - Number(invoice.balance)
-      if (excess > 0.01) {
-        const invSemNum = (invoice as { semesterNumber?: number }).semesterNumber
-        if (invSemNum) {
-          const nextSemNum = invSemNum + 1
-          const nextInvoice = await tx.invoice.findFirst({
-            where: { studentId, semesterNumber: nextSemNum },
-          })
-          if (nextInvoice) {
-            const nextNewBalance = Math.max(0, Number(nextInvoice.balance) - excess)
-            const nextNewPaid = Number(nextInvoice.paidAmount) + excess
-            const nextStatus = nextNewBalance <= 0 ? 'paid' : 'partial'
-            await tx.invoice.update({
-              where: { id: nextInvoice.id },
-              data: { paidAmount: nextNewPaid, balance: nextNewBalance, status: nextStatus, updatedAt: new Date() },
-            })
-          }
-        }
-      }
+      // ⚠️ DO NOT update invoice balance here — only update after admin verifies
+      // Invoice stays as 'due' until admin verifies the UTR
+      // This prevents showing fee as paid before verification
     })
 
     // Notify admin via WhatsApp with full context (non-blocking)
@@ -652,7 +628,10 @@ export async function createSemInvoice(req: Request, res: Response, next: NextFu
 
     const student = await prisma.student.findUnique({
       where: { id: studentId },
-      select: { id: true, semester: true },
+      select: {
+        id: true, semester: true, rentPackage: true, depositAmount: true,
+        room: { select: { semesterRent: true, monthlyRent: true, annualRent: true } },
+      },
     })
     if (!student) throw new ApiError(404, 'Student not found')
 
@@ -665,20 +644,34 @@ export async function createSemInvoice(req: Request, res: Response, next: NextFu
       return
     }
 
+    // Calculate correct amount including deposit for sem 1
+    let feePerSem = 0
+    if (student.rentPackage === 'semester') feePerSem = Number(student.room?.semesterRent ?? 0)
+    else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0) * 6
+    else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0) / 2
+    const depositAmt = Number(student.depositAmount ?? 5000)
+    const correctAmount = semNumber === 1 ? feePerSem + depositAmt : feePerSem
+    // Use the provided amount if it matches, otherwise use calculated
+    const finalAmount = Math.abs(amount - correctAmount) < 1 ? correctAmount : amount
+
     const { generateInvoiceNumber } = await import('../utils/studentId')
     const invoiceNumber = await generateInvoiceNumber()
     const dueDate = new Date()
     dueDate.setDate(dueDate.getDate() + 7)
+
+    const description = semNumber === 1
+      ? `Semester 1 fee + Security deposit (₹${depositAmt})`
+      : `Semester ${semNumber} fee`
 
     const invoice = await prisma.invoice.create({
       data: {
         studentId,
         invoiceNumber,
         type: 'rent',
-        description: `Semester ${semNumber} fee`,
-        amount,
-        totalAmount: amount,
-        balance: amount,
+        description,
+        amount: finalAmount,
+        totalAmount: finalAmount,
+        balance: finalAmount,
         dueDate,
         status: 'due',
         semesterNumber: semNumber,

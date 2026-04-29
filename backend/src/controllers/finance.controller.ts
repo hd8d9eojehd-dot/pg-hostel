@@ -289,10 +289,16 @@ export async function verifyUtrPayment(req: Request, res: Response, next: NextFu
         },
       })
 
-      // Update invoice — recalculate balance
+      // Update invoice — apply payment to balance now that it's verified
       const invoice = payment.invoice
-      const newPaid = Number(invoice.paidAmount) + Number(payment.amount)
-      const newBalance = Math.max(0, Number(invoice.totalAmount) - newPaid)
+      const currentInvoice = await tx.invoice.findUnique({
+        where: { id: invoice.id },
+        select: { paidAmount: true, totalAmount: true, balance: true, semesterNumber: true },
+      })
+      if (!currentInvoice) return
+
+      const newPaid = Number(currentInvoice.paidAmount) + Number(payment.amount)
+      const newBalance = Math.max(0, Number(currentInvoice.totalAmount) - newPaid)
       await tx.invoice.update({
         where: { id: invoice.id },
         data: {
@@ -302,6 +308,28 @@ export async function verifyUtrPayment(req: Request, res: Response, next: NextFu
           updatedAt: new Date(),
         },
       })
+
+      // Handle overpayment — carry excess to next semester invoice
+      const excess = Number(payment.amount) - Number(currentInvoice.balance)
+      if (excess > 0.01 && currentInvoice.semesterNumber) {
+        const nextSemNum = currentInvoice.semesterNumber + 1
+        const nextInvoice = await tx.invoice.findFirst({
+          where: { studentId: payment.studentId, semesterNumber: nextSemNum },
+        })
+        if (nextInvoice) {
+          const nextNewBalance = Math.max(0, Number(nextInvoice.balance) - excess)
+          const nextNewPaid = Number(nextInvoice.paidAmount) + excess
+          await tx.invoice.update({
+            where: { id: nextInvoice.id },
+            data: {
+              paidAmount: nextNewPaid,
+              balance: nextNewBalance,
+              status: nextNewBalance <= 0.01 ? 'paid' : 'partial',
+              updatedAt: new Date(),
+            },
+          })
+        }
+      }
     })
 
     // Notify student via WhatsApp with full context

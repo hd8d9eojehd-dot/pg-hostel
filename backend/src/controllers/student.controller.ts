@@ -191,10 +191,44 @@ export async function verifyQr(req: Request, res: Response, next: NextFunction):
     if (!student) {
       if (req.headers.accept?.includes('text/html')) {
         res.setHeader('Content-Type', 'text/html')
-        res.send(`<!DOCTYPE html><html><body style="font-family:Arial;text-align:center;padding:40px"><h2 style="color:#ef4444">Student not found</h2></body></html>`)
+        res.send(`<!DOCTYPE html><html><body style="font-family:Arial;text-align:center;padding:40px"><h2 style="color:#ef4444">Student not found</h2><p>This student ID is not registered in the system.</p></body></html>`)
         return
       }
       throw new ApiError(404, 'Student not found')
+    }
+
+    // Show vacated students clearly — they are no longer residents
+    if (student.status === 'vacated') {
+      if (req.headers.accept?.includes('text/html')) {
+        res.setHeader('Content-Type', 'text/html')
+        res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Student Vacated</title>
+        <style>body{font-family:-apple-system,sans-serif;background:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+        .card{background:white;border-radius:16px;overflow:hidden;max-width:400px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+        .header{background:linear-gradient(135deg,#dc2626,#b91c1c);padding:20px;color:white}
+        .body{padding:20px}.row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:14px}
+        .label{color:#64748b}.value{font-weight:600;color:#1e293b}
+        .badge{display:inline-flex;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fee2e2;color:#dc2626}
+        .footer{padding:12px 20px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center}</style></head>
+        <body><div class="card">
+        <div class="header"><h1 style="font-size:13px;opacity:.8;text-transform:uppercase;letter-spacing:1px">Student ID Verification</h1>
+        <h2 style="font-size:20px;font-weight:700;margin-top:4px">${student.room?.branch?.name ?? env.PG_NAME}</h2></div>
+        <div class="body">
+        <div style="text-align:center;padding:16px 0">
+          <div style="font-size:48px;margin-bottom:8px">🚪</div>
+          <p style="font-size:18px;font-weight:700;color:#1e293b">${student.name}</p>
+          <p style="font-family:monospace;font-size:13px;color:#4f46e5;margin-top:4px">${student.studentId}</p>
+        </div>
+        <div class="row"><span class="label">Status</span><span class="badge">Vacated</span></div>
+        <div class="row"><span class="label">Last Stay Until</span><span class="value">${new Date(student.stayEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:16px;font-size:13px;color:#991b1b">
+          ⚠️ This student has vacated and is no longer a resident.
+        </div></div>
+        <div class="footer">Verified · ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} · ${student.room?.branch?.name ?? env.PG_NAME}</div>
+        </div></body></html>`)
+        return
+      }
+      res.json({ success: true, data: { studentId: student.studentId, name: student.name, status: 'vacated', verified: true } })
+      return
     }
 
     const openInvoices = student.invoices ?? []

@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
-import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, RotateCcw, Info } from 'lucide-react'
+import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, RotateCcw } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 
 export default function WhatsAppPage() {
@@ -21,11 +21,6 @@ export default function WhatsAppPage() {
   const [message, setMessage] = useState('')
   const [bulkMessage, setBulkMessage] = useState('')
   const [page, setPage] = useState(1)
-
-  // Detect if running on production (Vercel) vs local
-  const isProduction = typeof window !== 'undefined' &&
-    !window.location.hostname.includes('localhost') &&
-    !window.location.hostname.includes('127.0.0.1')
 
   // Component that fetches QR image from backend (avoids client-side canvas issues)
   function WhatsAppQrImage() {
@@ -176,25 +171,6 @@ export default function WhatsAppPage() {
     <div>
       <Header title="WhatsApp" />
       <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-
-        {/* Production notice */}
-        {isProduction && (
-          <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-blue-800">WhatsApp runs on your local backend</p>
-              <p className="text-sm text-blue-700 mt-0.5">
-                You are accessing the admin portal from a production URL. WhatsApp features (QR scan, sending messages) only work when the backend is running locally.
-              </p>
-              <p className="text-sm text-blue-600 mt-1">
-                To use WhatsApp: open the admin portal at{' '}
-                <a href="http://localhost:3000/whatsapp" className="font-mono underline hover:text-blue-800">
-                  http://localhost:3000/whatsapp
-                </a>
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Connection status */}
         <Card className={status?.ready ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>

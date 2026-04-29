@@ -265,28 +265,30 @@ export default function NewStudentPage() {
               <F label="Branch" name="branch" placeholder="Computer Science" required />
               <div className="space-y-1.5">
                 <Label>Year of Study <span className="text-destructive">*</span></Label>
-                <Input type="number" min={0} max={6}
+                <Input type="number" min={1} max={6}
                   {...register('yearOfStudy', { valueAsNumber: true })}
                   onChange={e => {
-                    const yr = parseInt(e.target.value, 10) || 0
-                    setValue('yearOfStudy', yr)
-                    // Auto-set: totalSemesters = year * 2, currentSem = year * 2 - 1 (first sem of that year)
+                    const yr = parseInt(e.target.value, 10) || 1
+                    setValue('yearOfStudy', yr, { shouldDirty: true })
+                    // Auto-calculate: totalSemesters = year * 2 (e.g. yr=1→2, yr=2→4, yr=4→8)
                     const totalSems = yr * 2
-                    const currentSem = Math.max(1, yr * 2 - 1)
-                    setValue('totalSemesters', totalSems || 8)
-                    setValue('semester', currentSem)
+                    // currentSem = first sem of that year = (yr-1)*2 + 1
+                    const currentSem = Math.max(1, (yr - 1) * 2 + 1)
+                    setValue('totalSemesters', totalSems, { shouldDirty: true })
+                    setValue('semester', currentSem, { shouldDirty: true })
                   }}
                 />
+                <p className="text-xs text-gray-400">Auto-sets total sems (yr×2) and current sem</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Current Semester <span className="text-destructive">*</span></Label>
-                <Input type="number" min={1} max={12} {...register('semester', { valueAsNumber: true })} />
-                <p className="text-xs text-gray-400">Auto-set from year (Year {yearOfStudy} → Sem {Math.max(1, yearOfStudy * 2 - 1)}). Can be changed.</p>
+                <Input type="number" min={1} max={16} {...register('semester', { valueAsNumber: true })} />
+                <p className="text-xs text-gray-400">Year {yearOfStudy} → Sem {Math.max(1, (yearOfStudy - 1) * 2 + 1)} (auto). Can be changed.</p>
               </div>
               <div className="space-y-1.5">
-                <Label>Total Semesters in Course</Label>
+                <Label>Total Semesters in Course <span className="text-destructive">*</span></Label>
                 <Input type="number" min={1} max={16} {...register('totalSemesters', { valueAsNumber: true })} />
-                <p className="text-xs text-gray-400">e.g. B.Tech = 8 sems, MBA = 4 sems</p>
+                <p className="text-xs text-gray-400">Year {yearOfStudy} → {yearOfStudy * 2} sems (auto). e.g. B.Tech=8, MBA=4</p>
               </div>
             </CardContent>
           </Card>

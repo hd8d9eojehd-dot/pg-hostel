@@ -116,6 +116,20 @@ export async function initWhatsApp(): Promise<void> {
       client = wa
       qrCodeString = null
       logger.info('✅ WhatsApp client ready — messages will be delivered')
+
+      // Keep-alive: send a ping every 30s to prevent session timeout
+      const keepAlive = setInterval(async () => {
+        if (!isReady || !client) {
+          clearInterval(keepAlive)
+          return
+        }
+        try {
+          await (client as { getState: () => Promise<string> }).getState()
+        } catch {
+          // State check failed — client may have disconnected
+          logger.warn('WhatsApp keep-alive check failed')
+        }
+      }, 30_000)
     })
 
     wa.on('disconnected', (reason: string) => {

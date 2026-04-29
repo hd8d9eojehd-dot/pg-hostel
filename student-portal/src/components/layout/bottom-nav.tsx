@@ -19,7 +19,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t"
+      className="flex-shrink-0 bg-white border-t z-50"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="flex items-stretch justify-around max-w-lg mx-auto">

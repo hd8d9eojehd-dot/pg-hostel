@@ -185,14 +185,21 @@ export default function StudentDetailPage() {
 
   const collectPayment = useMutation({
     mutationFn: async () => {
-      const totalWithFee = Number(payAmount) + payLateFee
+      const amt = Number(payAmount)
+      if (!payInvoiceId) throw new Error('Please select an invoice')
+      if (!amt || amt <= 0) throw new Error('Please enter a valid amount')
+
+      // Step 1: Add late fee to invoice if specified (updates invoice balance)
       if (payLateFee > 0) {
         await api.patch(`/finance/invoices/${payInvoiceId}/add-late-fee`, { lateFee: payLateFee })
       }
+
+      // Step 2: Record payment for the amount (balance now includes late fee)
+      const totalAmount = amt + payLateFee
       const res = await api.post('/finance/payments', {
         invoiceId: payInvoiceId,
         studentId: id,
-        amount: totalWithFee,
+        amount: totalAmount,
         paymentMode: 'cash',
         paidDate: payDate,
         notes: payNotes || 'Cash payment collected at counter',
@@ -203,7 +210,11 @@ export default function StudentDetailPage() {
       qc.invalidateQueries({ queryKey: ['student', id] })
       setPaySuccess({ receiptNumber: data.receiptNumber, amount: Number(data.amount) })
     },
-    onError: (e: unknown) => toast({ title: 'Payment failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
+    onError: (e: unknown) => toast({
+      title: 'Payment failed',
+      description: (e as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error ?? (e as { message?: string })?.message,
+      variant: 'destructive',
+    }),
   })
 
   if (isLoading) return (
@@ -276,12 +287,9 @@ export default function StudentDetailPage() {
             )}
             {student.status !== 'vacated' && (
               <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setVacateOpen(true)}>
-                <UserX className="w-3.5 h-3.5" /> Vacate
+                <UserX className="w-3.5 h-3.5" /> Vacate Student
               </Button>
             )}
-            <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => { setDeleteStep(1); setDeleteConfirmId(''); setDeleteOpen(true) }}>
-              <AlertTriangle className="w-3.5 h-3.5" /> Delete Permanently
-            </Button>
           </div>
         </div>
 
@@ -636,17 +644,24 @@ export default function StudentDetailPage() {
         </Tabs>
       </div>
 
-      {/* Vacate Dialog */}
+      {/* Vacate Dialog — permanent action, frees room, blocks login */}
       <Dialog open={vacateOpen} onOpenChange={setVacateOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Vacate Student</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <UserX className="w-5 h-5" /> Vacate Student
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              ⚠️ Vacating <strong>{student.name}</strong> will free their room/bed and block their portal login. Their data is retained for records. This can be reversed by Re-admitting.
+            </div>
             <div className="space-y-1.5">
-              <Label>Vacate Date</Label>
+              <Label>Vacate Date <span className="text-destructive">*</span></Label>
               <Input type="date" value={vacateForm.vacateDate} onChange={e => setVacateForm(f => ({ ...f, vacateDate: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Reason</Label>
+              <Label>Reason <span className="text-destructive">*</span></Label>
               <Textarea value={vacateForm.reason} onChange={e => setVacateForm(f => ({ ...f, reason: e.target.value }))} placeholder="Reason for vacating..." />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -667,7 +682,7 @@ export default function StudentDetailPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setVacateOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={() => vacate.mutate()} disabled={vacate.isPending || !vacateForm.vacateDate || !vacateForm.reason}>
-              {vacate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : 'Confirm Vacate'}
+              {vacate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><UserX className="w-4 h-4" /> Confirm Vacate</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -729,39 +744,6 @@ export default function StudentDetailPage() {
             <Button variant="outline" onClick={() => setExtendOpen(false)}>Cancel</Button>
             <Button onClick={() => extendStay.mutate()} disabled={extendStay.isPending || !extendForm.newEndDate}>
               {extendStay.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : 'Extend Stay'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Permanently Dialog */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Delete Student Permanently</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            {deleteStep === 1 && (
-              <>
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-                  ⚠️ This will permanently delete <strong>{student.name}</strong> and ALL associated data (invoices, payments, complaints, documents). This cannot be undone.
-                </div>
-                {feeStatus !== 'clear' && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
-                    ⚠️ This student has outstanding dues of {formatCurrency(totalDue)}. Deleting will erase all payment records.
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label>Type the Student ID to confirm: <strong>{student.studentId}</strong></Label>
-                  <Input value={deleteConfirmId} onChange={e => setDeleteConfirmId(e.target.value)} placeholder={student.studentId} />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive"
-              disabled={deleteConfirmId !== student.studentId || deleteStudent.isPending}
-              onClick={() => deleteStudent.mutate()}>
-              {deleteStudent.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</> : 'Delete Permanently'}
             </Button>
           </DialogFooter>
         </DialogContent>

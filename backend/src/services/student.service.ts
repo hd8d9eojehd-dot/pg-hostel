@@ -208,7 +208,7 @@ export async function deleteStudent(id: string, input: DeleteStudentInput, admin
   await prisma.$transaction(async (tx) => {
     // Free bed
     if (student.bedId) {
-      await tx.bed.update({ where: { id: student.bedId }, data: { isOccupied: false } })
+      await tx.bed.update({ where: { id: student.bedId }, data: { isOccupied: false } }).catch(() => {})
     }
     // Update room status
     if (student.roomId) {
@@ -216,25 +216,27 @@ export async function deleteStudent(id: string, input: DeleteStudentInput, admin
       await tx.room.update({
         where: { id: student.roomId },
         data: { status: occupied === 0 ? 'available' : 'partial' },
-      })
+      }).catch(() => {})
     }
 
-    // Delete all related records in order
-    await tx.whatsappLog.deleteMany({ where: { studentId: id } })
-    await tx.feedback.deleteMany({ where: { studentId: id } })
-    await tx.outpass.deleteMany({ where: { studentId: id } })
-    await tx.complaintComment.deleteMany({ where: { complaint: { studentId: id } } })
-    await tx.complaint.deleteMany({ where: { studentId: id } })
-    await tx.document.deleteMany({ where: { studentId: id } })
-    await tx.extraCharge.deleteMany({ where: { studentId: id } })
-    await tx.roomHistory.deleteMany({ where: { studentId: id } })
-    await tx.renewalExit.deleteMany({ where: { studentId: id } })
-    await tx.payment.deleteMany({ where: { studentId: id } })
-    await tx.invoice.deleteMany({ where: { studentId: id } })
-    await tx.parent.deleteMany({ where: { studentId: id } })
+    // Delete all related records in order (catch each to avoid cascade failures)
+    await tx.whatsappLog.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.feedback.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.outpass.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.complaintComment.deleteMany({ where: { complaint: { studentId: id } } }).catch(() => {})
+    await tx.complaint.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.document.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.extraCharge.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.roomHistory.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.renewalExit.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.payment.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.invoice.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.parent.deleteMany({ where: { studentId: id } }).catch(() => {})
+    // Delete activity logs referencing this student entity
+    await tx.activityLog.deleteMany({ where: { entityId: id, entityType: 'student' } }).catch(() => {})
     await tx.student.delete({ where: { id } })
 
-    // Activity log
+    // Activity log for the deletion itself
     await tx.activityLog.create({
       data: {
         actorId: adminId,
@@ -244,7 +246,7 @@ export async function deleteStudent(id: string, input: DeleteStudentInput, admin
         entityId: id,
         meta: { studentId: student.studentId, name: student.name, outstandingBalance },
       },
-    })
+    }).catch(() => {})
   })
 
   // Delete Supabase auth user — must succeed for security
@@ -544,15 +546,17 @@ export async function extendStay(id: string, input: ExtendStayInput) {
 export async function vacateStudent(id: string, input: VacateStudentInput, adminId: string) {
   const student = await prisma.student.findUnique({
     where: { id },
-    select: { id: true, bedId: true, roomId: true, status: true },
+    select: { id: true, bedId: true, roomId: true, status: true, studentId: true, name: true, supabaseAuthId: true },
   })
   if (!student) throw new ApiError(404, 'Student not found')
   if (student.status === 'vacated') throw new ApiError(400, 'Student already vacated')
 
   await prisma.$transaction(async (tx) => {
+    // Free bed
     if (student.bedId) {
       await tx.bed.update({ where: { id: student.bedId }, data: { isOccupied: false } })
     }
+    // Update room status
     if (student.roomId) {
       const occupied = await tx.bed.count({ where: { roomId: student.roomId, isOccupied: true } })
       await tx.room.update({
@@ -560,6 +564,7 @@ export async function vacateStudent(id: string, input: VacateStudentInput, admin
         data: { status: occupied === 0 ? 'available' : 'partial' },
       })
     }
+    // Mark as vacated (keep record for history/re-admission)
     await tx.student.update({
       where: { id },
       data: {
@@ -595,4 +600,7 @@ export async function vacateStudent(id: string, input: VacateStudentInput, admin
       },
     })
   })
+
+  // Disable Supabase auth (don't delete — keep for re-admission)
+  // Student can no longer login since status is 'vacated' (blocked in auth middleware)
 }

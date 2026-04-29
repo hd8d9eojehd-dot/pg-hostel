@@ -55,8 +55,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="min-h-[100dvh] bg-gray-50" style={{ paddingBottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}>
-      {children}
+    <div className="flex flex-col h-[100dvh] bg-gray-50 overflow-hidden">
+      {/* Main scrollable content area — sits above fixed bottom nav */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {children}
+      </div>
       <BottomNav />
     </div>
   )
