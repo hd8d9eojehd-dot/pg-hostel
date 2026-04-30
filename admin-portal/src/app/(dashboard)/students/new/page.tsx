@@ -67,7 +67,7 @@ export default function NewStudentPage() {
   const availableBeds = selectedRoom?.beds?.filter((b: { isOccupied: boolean }) => !b.isOccupied) ?? []
   const feePerSem = calcFeePerSem(rentPackage, selectedRoom)
   const remainingSems = Math.max(0, totalSemesters - currentSemester + 1)
-  const totalCourseFee = feePerSem * totalSemesters
+  // FIXED: remainingFee = only sems from current onwards (not total course)
   const remainingFee = feePerSem * remainingSems
 
   // Total to collect = sem fee + deposit
@@ -270,20 +270,18 @@ export default function NewStudentPage() {
                   onChange={e => {
                     const yr = parseInt(e.target.value, 10) || 1
                     setValue('yearOfStudy', yr, { shouldDirty: true })
-                    // Auto-calculate: totalSemesters = year * 2 (e.g. yr=1→2, yr=2→4, yr=4→8)
+                    // Auto-calculate total semesters only (yr×2), NOT current semester
                     const totalSems = yr * 2
-                    // currentSem = first sem of that year = (yr-1)*2 + 1
-                    const currentSem = Math.max(1, (yr - 1) * 2 + 1)
                     setValue('totalSemesters', totalSems, { shouldDirty: true })
-                    setValue('semester', currentSem, { shouldDirty: true })
+                    // Do NOT auto-set semester — admin enters it manually
                   }}
                 />
-                <p className="text-xs text-gray-400">Auto-sets total sems (yr×2) and current sem</p>
+                <p className="text-xs text-gray-400">Auto-sets total sems (yr×2). Enter current sem manually below.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Current Semester <span className="text-destructive">*</span></Label>
                 <Input type="number" min={1} max={16} {...register('semester', { valueAsNumber: true })} />
-                <p className="text-xs text-gray-400">Year {yearOfStudy} → Sem {Math.max(1, (yearOfStudy - 1) * 2 + 1)} (auto). Can be changed.</p>
+                <p className="text-xs text-gray-400">Enter the semester the student is currently in.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Total Semesters in Course <span className="text-destructive">*</span></Label>
@@ -396,61 +394,56 @@ export default function NewStudentPage() {
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Semester</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-600">Fee</th>
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Status</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600">Mark</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Array.from({ length: totalSemesters }, (_, i) => i + 1).map(sem => {
                         const isPast = sem < currentSemester
                         const isCurrent = sem === currentSemester
-                        const isFuture = sem > currentSemester
                         return (
-                          <tr key={sem} className={`border-b ${isCurrent ? 'bg-blue-50' : ''}`}>
+                          <tr key={sem} className={`border-b ${isCurrent ? 'bg-blue-50' : isPast ? 'bg-gray-50/50' : ''}`}>
                             <td className="px-3 py-2">
                               Sem {sem}
-                              {isCurrent && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Current</span>}
+                              {isCurrent && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Joining Now</span>}
                             </td>
-                            <td className="px-3 py-2 text-right font-medium">{formatCurrency(feePerSem)}</td>
+                            <td className="px-3 py-2 text-right font-medium text-gray-500">
+                              {isPast ? '—' : formatCurrency(feePerSem)}
+                            </td>
                             <td className="px-3 py-2">
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isPast ? 'bg-green-100 text-green-700' : isCurrent ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
-                                {isPast ? '✓ Paid' : isCurrent ? '⏳ Due Now' : 'Upcoming'}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                isPast
+                                  ? 'bg-gray-100 text-gray-400'
+                                  : isCurrent
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {isPast ? 'Before joining' : isCurrent ? '⏳ Collecting now' : 'Upcoming'}
                               </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              {isPast && (
-                                <span className="text-xs text-gray-400 italic">Past sem</span>
-                              )}
-                              {isCurrent && (
-                                <span className="text-xs text-blue-600 font-medium">Collecting now</span>
-                              )}
-                              {isFuture && (
-                                <span className="text-xs text-gray-300">—</span>
-                              )}
                             </td>
                           </tr>
                         )
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-50 font-semibold">
-                        <td className="px-3 py-2">Total Course Fee</td>
-                        <td className="px-3 py-2 text-right text-blue-700">{formatCurrency(totalCourseFee)}</td>
-                        <td colSpan={2} className="px-3 py-2 text-xs text-gray-500">{totalSemesters} sems × {formatCurrency(feePerSem)}</td>
+                      <tr className="bg-gray-50 font-semibold border-t-2">
+                        <td className="px-3 py-2">Fee from Sem {currentSemester}</td>
+                        <td className="px-3 py-2 text-right text-blue-700">{formatCurrency(remainingFee)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{remainingSems} sem{remainingSems !== 1 ? 's' : ''} × {formatCurrency(feePerSem)}</td>
                       </tr>
                       <tr className="bg-green-50">
-                        <td className="px-3 py-2 text-green-700">Deposit</td>
+                        <td className="px-3 py-2 text-green-700">Security Deposit</td>
                         <td className="px-3 py-2 text-right text-green-700">{formatCurrency(Number(depositAmount))}</td>
-                        <td colSpan={2} className="px-3 py-2 text-xs text-green-600">Refundable</td>
+                        <td className="px-3 py-2 text-xs text-green-600">Refundable on exit</td>
                       </tr>
-                      <tr className="bg-blue-50 font-bold">
-                        <td className="px-3 py-2 text-blue-800">Remaining Fee</td>
-                        <td className="px-3 py-2 text-right text-blue-800">{formatCurrency(remainingFee)}</td>
-                        <td colSpan={2} className="px-3 py-2 text-xs text-blue-600">{remainingSems} sems left</td>
+                      <tr className="bg-indigo-50 font-bold">
+                        <td className="px-3 py-2 text-indigo-800">Total to Collect Today</td>
+                        <td className="px-3 py-2 text-right text-indigo-800">{formatCurrency(feePerSem + Number(depositAmount))}</td>
+                        <td className="px-3 py-2 text-xs text-indigo-600">Sem {currentSemester} fee + deposit</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
-                <p className="text-xs text-gray-400">Past semesters (before current) are assumed paid. Current semester fee is collected now.</p>
+                <p className="text-xs text-gray-400">Only semesters from Sem {currentSemester} onwards are collected at this PG. Past sems are not charged.</p>
               </CardContent>
             </Card>
           )}
