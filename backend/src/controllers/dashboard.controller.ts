@@ -39,14 +39,32 @@ export async function getDashboardStats(_req: Request, res: Response, next: Next
         orderBy: { createdAt: 'desc' },
         include: { admin: { select: { name: true, role: true } } },
       }),
-      // All payments in last 6 months — single query for monthly chart
+      // All verified payments in last 6 months — single query for monthly chart
       prisma.payment.findMany({
-        where: { paidDate: { gte: sixMonthsAgo } },
+        where: {
+          paidDate: { gte: sixMonthsAgo },
+          utrRejected: false,
+          OR: [
+            { paymentMode: 'cash' },
+            { paymentMode: 'online', utrVerified: true },
+            { paymentMode: 'upi', utrVerified: true },
+            { paymentMode: 'bank_transfer', utrVerified: true },
+          ],
+        },
         select: { paidDate: true, amount: true },
       }),
-      // This month total
+      // This month total (verified only)
       prisma.payment.aggregate({
-        where: { paidDate: { gte: startOfMonth } },
+        where: {
+          paidDate: { gte: startOfMonth },
+          utrRejected: false,
+          OR: [
+            { paymentMode: 'cash' },
+            { paymentMode: 'online', utrVerified: true },
+            { paymentMode: 'upi', utrVerified: true },
+            { paymentMode: 'bank_transfer', utrVerified: true },
+          ],
+        },
         _sum: { amount: true },
       }),
       // Total pending balance

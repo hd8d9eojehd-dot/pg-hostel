@@ -1,4 +1,4 @@
-﻿
+
 'use client'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -50,12 +50,12 @@ type FeeData = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  paid:     { label: 'Paid',     color: 'text-green-700',  bg: 'bg-green-100',  icon: '✓' },
-  partial:  { label: 'Partial',  color: 'text-orange-700', bg: 'bg-orange-100', icon: '◑' },
-  due:      { label: 'Due',      color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '⏳' },
-  overdue:  { label: 'Overdue',  color: 'text-red-700',    bg: 'bg-red-100',    icon: '⚠' },
-  current:  { label: 'Current',  color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '→' },
-  upcoming: { label: 'Upcoming', color: 'text-gray-500',   bg: 'bg-gray-100',   icon: '○' },
+  paid:     { label: 'Paid',     color: 'text-green-700',  bg: 'bg-green-100',  icon: '?' },
+  partial:  { label: 'Partial',  color: 'text-orange-700', bg: 'bg-orange-100', icon: '?' },
+  due:      { label: 'Due',      color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '?' },
+  overdue:  { label: 'Overdue',  color: 'text-red-700',    bg: 'bg-red-100',    icon: '?' },
+  current:  { label: 'Current',  color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '?' },
+  upcoming: { label: 'Upcoming', color: 'text-gray-500',   bg: 'bg-gray-100',   icon: '?' },
 }
 
 export default function FinancePage() {
@@ -83,7 +83,7 @@ export default function FinancePage() {
     staleTime: 5 * 60_000,
   })
 
-  // Live UTR payment status — polls every 10s
+  // Live UTR payment status � polls every 10s
   const { data: myPayments } = useQuery({
     queryKey: ['my-payments'],
     queryFn: () => api.get('/portal/my-payments').then(r => r.data.data),
@@ -96,7 +96,7 @@ export default function FinancePage() {
   )
   const rejectedUtrs = (myPayments ?? []).filter((p: { utrRejected: boolean }) => p.utrRejected)
 
-  // Online payment via Cashfree — only available after admin approves payment request
+  // Online payment via Cashfree � only available after admin approves payment request
   const initiateOnline = useMutation({
     mutationFn: async () => {
       if (!payingRow) throw new Error('No invoice selected')
@@ -155,7 +155,7 @@ export default function FinancePage() {
       if (payingRow.invoiceId) payload['invoiceId'] = payingRow.invoiceId
       else if (payingRow.semNumber) payload['semNumber'] = payingRow.semNumber
       await api.post('/portal/payment-request', payload)
-      toast({ title: '✓ UTR submitted', description: 'Admin will verify within 24 hours' })
+      toast({ title: '? UTR submitted', description: 'Admin will verify within 24 hours' })
       qc.invalidateQueries({ queryKey: ['fee-structure'] })
       qc.invalidateQueries({ queryKey: ['my-payments'] })
       setRequestSubmitted(true)
@@ -230,7 +230,7 @@ export default function FinancePage() {
           <div className="mx-4 mt-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1">
               <span>Course completion</span>
-              <span>{student.currentSem}/{student.totalSems} sems · {Math.round((summary.totalPaid / summary.totalCourseFee) * 100)}% paid</span>
+              <span>{student.currentSem}/{student.totalSems} sems � {Math.round((summary.totalPaid / summary.totalCourseFee) * 100)}% paid</span>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
@@ -246,20 +246,20 @@ export default function FinancePage() {
           {(['structure', 'pay', 'history'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors capitalize ${tab === t ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
-              {t === 'structure' ? '📊 Fee Plan' : t === 'pay' ? '💳 Pay Now' : '🧾 History'}
+              {t === 'structure' ? '?? Fee Plan' : t === 'pay' ? '?? Pay Now' : '?? History'}
             </button>
           ))}
         </div>
 
-        {/* UTR Status Banners — live updates */}
+        {/* UTR Status Banners � live updates */}
         {rejectedUtrs.length > 0 && (
           <div className="mx-4 space-y-2">
             {rejectedUtrs.map((p: { id: string; transactionRef: string; amount: number; utrRejectedReason?: string }) => (
               <div key={p.id} className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-3">
-                <span className="text-red-500 text-lg flex-shrink-0">❌</span>
+                <span className="text-red-500 text-lg flex-shrink-0">?</span>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-red-800">Payment Rejected</p>
-                  <p className="text-xs text-red-600 mt-0.5">UTR: <code className="font-mono">{p.transactionRef}</code> · ₹{Number(p.amount).toLocaleString('en-IN')}</p>
+                  <p className="text-xs text-red-600 mt-0.5">UTR: <code className="font-mono">{p.transactionRef}</code> � ?{Number(p.amount).toLocaleString('en-IN')}</p>
                   {p.utrRejectedReason && <p className="text-xs text-red-500 mt-0.5">Reason: {p.utrRejectedReason}</p>}
                   <p className="text-xs text-red-400 mt-1">Please contact admin or resubmit with correct UTR.</p>
                 </div>
@@ -270,7 +270,7 @@ export default function FinancePage() {
         {pendingUtrs.length > 0 && (
           <div className="mx-4">
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-3">
-              <span className="text-orange-500 text-lg flex-shrink-0">⏳</span>
+              <span className="text-orange-500 text-lg flex-shrink-0">?</span>
               <div>
                 <p className="text-sm font-semibold text-orange-800">{pendingUtrs.length} Payment{pendingUtrs.length > 1 ? 's' : ''} Pending Verification</p>
                 <p className="text-xs text-orange-600 mt-0.5">Admin will verify within 24 hours. This page updates automatically.</p>
@@ -279,7 +279,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* ── FEE STRUCTURE TAB ── */}
+        {/* -- FEE STRUCTURE TAB -- */}
         {tab === 'structure' && (
           <div className="p-4 space-y-3">
             {/* Course info */}
@@ -290,11 +290,11 @@ export default function FinancePage() {
                     <BookOpen className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{student.course ?? 'Course'} — {student.branch ?? ''}</p>
+                    <p className="font-semibold text-gray-900">{student.course ?? 'Course'} � {student.branch ?? ''}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Sem {student.currentSem} of {student.totalSems} · {student.rentPackage} · {formatCurrency(student.feePerSem)}/sem
+                      Sem {student.currentSem} of {student.totalSems} � {student.rentPackage} � {formatCurrency(student.feePerSem)}/{student.rentPackage === 'monthly' ? 'month' : student.rentPackage === 'annual' ? 'year' : 'sem'}
                     </p>
-                    {room && <p className="text-xs text-gray-400 mt-0.5">Room {room.roomNumber} · {room.pgName}</p>}
+                    {room && <p className="text-xs text-gray-400 mt-0.5">Room {room.roomNumber} � {room.pgName}</p>}
                   </div>
                 </div>
               </CardContent>
@@ -318,7 +318,7 @@ export default function FinancePage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-gray-900">Semester {row.sem}</p>
+                            <p className="text-sm font-semibold text-gray-900">{student.rentPackage === 'monthly' ? `Month ${row.sem}` : student.rentPackage === 'annual' ? `Year ${row.sem}` : `Semester ${row.sem}`}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>
                               {cfg.icon} {cfg.label}
                             </span>
@@ -330,7 +330,7 @@ export default function FinancePage() {
                             <span className="text-xs text-gray-500">
                               Fee: {formatCurrency(row.sem === 1 ? row.feeAmount - d.summary.depositAmount : row.feeAmount)}
                               {row.sem === 1 && d.summary.depositAmount > 0 && (
-                                <span className="text-gray-400"> + ₹{d.summary.depositAmount.toLocaleString('en-IN')} deposit</span>
+                                <span className="text-gray-400"> + ?{d.summary.depositAmount.toLocaleString('en-IN')} deposit</span>
                               )}
                             </span>
                             {row.paidAmount > 0 && <span className="text-xs text-green-600">Paid: {formatCurrency(row.paidAmount)}</span>}
@@ -372,7 +372,7 @@ export default function FinancePage() {
                               <div key={p.id} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
                                   <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                  <span className="text-gray-600">{formatDate(p.paidDate)} · {p.paymentMode.replace('_', ' ')}</span>
+                                  <span className="text-gray-600">{formatDate(p.paidDate)} � {p.paymentMode.replace('_', ' ')}</span>
                                   {p.transactionRef && <span className="text-gray-400 font-mono">UTR: {p.transactionRef}</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -409,7 +409,7 @@ export default function FinancePage() {
                               <p className="text-sm font-medium capitalize">{inv.description ?? inv.type}</p>
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">{inv.invoiceNumber} · Due {formatDate(inv.dueDate)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{inv.invoiceNumber} � Due {formatDate(inv.dueDate)}</p>
                             {inv.balance > 0 && <p className="text-xs text-red-600 font-medium mt-0.5">Balance: {formatCurrency(inv.balance)}</p>}
                           </div>
                           {canPay && (
@@ -434,7 +434,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* ── PAY NOW TAB ── */}
+        {/* -- PAY NOW TAB -- */}
         {tab === 'pay' && (
           <div className="p-4 space-y-3">
             {payableSems.length === 0 && pendingOther.length === 0 ? (
@@ -451,7 +451,7 @@ export default function FinancePage() {
                 {[...payableSems.map(s => ({
                   invoiceId: s.invoice?.id ?? null,
                   semNumber: s.sem,
-                  label: `Semester ${s.sem} Fee`,
+                  label: student.rentPackage === 'monthly' ? `Month ${s.sem} Fee` : student.rentPackage === 'annual' ? `Year ${s.sem} Fee` : `Semester ${s.sem} Fee`,
                   balance: s.balance,
                   status: s.status,
                   dueDate: s.invoice?.dueDate ?? new Date().toISOString(),
@@ -475,7 +475,7 @@ export default function FinancePage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold">{item.label}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{item.invoiceNumber} · Due {formatDate(item.dueDate)}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{item.invoiceNumber} � Due {formatDate(item.dueDate)}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-red-600">{formatCurrency(item.balance)}</p>
@@ -553,12 +553,12 @@ export default function FinancePage() {
                           <div className="grid grid-cols-2 gap-2">
                             <button onClick={() => setPayMode('upi')}
                               className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'upi' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                              <p className="text-xs font-semibold">📱 UPI / Bank Transfer</p>
+                              <p className="text-xs font-semibold">?? UPI / Bank Transfer</p>
                               <p className="text-[10px] text-gray-400 mt-0.5">Submit UTR for verification</p>
                             </button>
                             <button onClick={() => setPayMode('online')}
                               className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'online' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                              <p className="text-xs font-semibold">🌐 Online (Cashfree)</p>
+                              <p className="text-xs font-semibold">?? Online (Cashfree)</p>
                               <p className="text-[10px] text-gray-400 mt-0.5">Card / UPI / Net Banking</p>
                             </button>
                           </div>
@@ -600,7 +600,7 @@ export default function FinancePage() {
                                       )}
                                     </>
                                   )}
-                                  <p className="text-[10px] text-blue-600">Transfer ₹{formatCurrency(parseFloat(customAmount) || payingRow.balance)} and enter UTR below</p>
+                                  <p className="text-[10px] text-blue-600">Transfer ?{formatCurrency(parseFloat(customAmount) || payingRow.balance)} and enter UTR below</p>
                                 </div>
                               ) : (
                                 <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
@@ -639,7 +639,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* ── HISTORY TAB ── */}
+        {/* -- HISTORY TAB -- */}
         {tab === 'history' && (
           <div className="p-4 space-y-3">
             {semesters.every(s => s.invoice?.payments.length === 0 || !s.invoice) && paidOther.length === 0 ? (
@@ -664,7 +664,7 @@ export default function FinancePage() {
                                 <p className="text-sm font-medium">{formatDate(p.paidDate)}</p>
                                 <p className="text-xs text-gray-400 mt-0.5 capitalize">
                                   {p.paymentMode.replace('_', ' ')}
-                                  {p.transactionRef ? ` · UTR: ${p.transactionRef}` : ''}
+                                  {p.transactionRef ? ` � UTR: ${p.transactionRef}` : ''}
                                 </p>
                               </div>
                             </div>
@@ -694,7 +694,7 @@ export default function FinancePage() {
                                 <p className="text-sm font-medium">{formatDate(p.paidDate)}</p>
                                 <p className="text-xs text-gray-400 mt-0.5 capitalize">
                                   {p.paymentMode.replace('_', ' ')}
-                                  {p.transactionRef ? ` · UTR: ${p.transactionRef}` : ''}
+                                  {p.transactionRef ? ` � UTR: ${p.transactionRef}` : ''}
                                 </p>
                               </div>
                             </div>

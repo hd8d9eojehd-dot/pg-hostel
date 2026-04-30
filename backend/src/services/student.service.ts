@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma'
 import { supabaseAdmin } from '../config/supabase'
 import { generateStudentId, generateInvoiceNumber, generateReceiptNumber } from '../utils/studentId'
-import { stayEndDate, stayEndDateFromSemesters, todayIST } from '../utils/indianTime'
+import { stayEndDate, stayEndDateFromSemesters, stayEndDateMonthly, stayEndDateAnnual, todayIST } from '../utils/indianTime'
 import { startOfDay } from 'date-fns'
 import { ApiError } from '../middleware/error.middleware'
 import type {
@@ -24,10 +24,27 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
   const studentId = await generateStudentId(joinDate)
   const totalSems = (input as { totalSemesters?: number }).totalSemesters ?? 8
   const currentSem = input.semester ?? 1
-  // Stay end date = semester-based: remaining sems × 6 months each
-  const endDate = stayEndDateFromSemesters(joinDate, currentSem, totalSems)
-  // Store computed duration for display
-  const computedDuration = `${(totalSems - currentSem + 1) * 6}months`
+  const rentPkg = input.rentPackage
+
+  // Stay end date and duration based on rent package
+  let endDate: Date
+  let computedDuration: string
+
+  if (rentPkg === 'semester') {
+    // Semester: remaining sems × 6 months each
+    endDate = stayEndDateFromSemesters(joinDate, currentSem, totalSems)
+    computedDuration = `${(totalSems - currentSem + 1) * 6}months`
+  } else if (rentPkg === 'monthly') {
+    // Monthly: stayMonths from input, default 12
+    const stayMonths = (input as { stayMonths?: number }).stayMonths ?? 12
+    endDate = stayEndDateMonthly(joinDate, stayMonths)
+    computedDuration = `${stayMonths}months`
+  } else {
+    // Annual: stayYears from input, default 1
+    const stayYears = (input as { stayYears?: number }).stayYears ?? 1
+    endDate = stayEndDateAnnual(joinDate, stayYears)
+    computedDuration = `${stayYears * 12}months`
+  }
 
   // Password = studentId (e.g. PG-2026-4821) — no temp password, no forced change
   const initialPassword = studentId
@@ -127,10 +144,10 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
 
   const room = student.room
 
-  // Calculate first period fee
+  // Calculate first period fee based on rent package
   let feeAmount = 0
   if (input.rentPackage === 'semester') feeAmount = Number(room?.semesterRent ?? 0)
-  else if (input.rentPackage === 'monthly') feeAmount = Number(room?.monthlyRent ?? 0) * 6
+  else if (input.rentPackage === 'monthly') feeAmount = Number(room?.monthlyRent ?? 0)
   else if (input.rentPackage === 'annual') feeAmount = Number(room?.annualRent ?? 0)
 
   if (feeAmount > 0) {
@@ -142,7 +159,8 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
     // If skipping payment, ALSO include deposit in the due amount
     const depositAmt = Number(input.depositAmount ?? 0)
     const totalInvoiceAmount = feeAmount + depositAmt
-    const invoiceDescription = `First ${input.rentPackage} fee + Security deposit (₹${depositAmt}) — Sem ${input.semester}`
+    const pkgLabel = input.rentPackage === 'semester' ? `Sem ${input.semester}` : input.rentPackage === 'monthly' ? 'Month 1' : 'Year 1'
+    const invoiceDescription = `First ${input.rentPackage} fee + Security deposit (₹${depositAmt}) — ${pkgLabel}`
 
     invoice = await prisma.invoice.create({
       data: {
@@ -284,8 +302,23 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
   // For renewal, use existing student's semester data for stay end date
   const renewTotalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
   const renewCurrentSem = student.semester ?? 1
-  const endDate = stayEndDateFromSemesters(joinDate, renewCurrentSem, renewTotalSems)
-  const computedDuration = `${(renewTotalSems - renewCurrentSem + 1) * 6}months`
+  const renewPkg = input.rentPackage
+
+  let endDate: Date
+  let computedDuration: string
+
+  if (renewPkg === 'semester') {
+    endDate = stayEndDateFromSemesters(joinDate, renewCurrentSem, renewTotalSems)
+    computedDuration = `${(renewTotalSems - renewCurrentSem + 1) * 6}months`
+  } else if (renewPkg === 'monthly') {
+    const stayMonths = (input as { stayMonths?: number }).stayMonths ?? 12
+    endDate = stayEndDateMonthly(joinDate, stayMonths)
+    computedDuration = `${stayMonths}months`
+  } else {
+    const stayYears = (input as { stayYears?: number }).stayYears ?? 1
+    endDate = stayEndDateAnnual(joinDate, stayYears)
+    computedDuration = `${stayYears * 12}months`
+  }
 
   const newRoom = await prisma.room.findUnique({
     where: { id: input.roomId },
@@ -357,11 +390,11 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
     })
   })
 
-  // Create first period invoice
+  // Create first period invoice for renewal
   let feeAmount = 0
   if (newRoom) {
     if (input.rentPackage === 'semester') feeAmount = Number(newRoom.semesterRent ?? 0)
-    else if (input.rentPackage === 'monthly') feeAmount = Number(newRoom.monthlyRent ?? 0) * 6
+    else if (input.rentPackage === 'monthly') feeAmount = Number(newRoom.monthlyRent ?? 0)
     else if (input.rentPackage === 'annual') feeAmount = Number(newRoom.annualRent ?? 0)
   }
 
@@ -370,18 +403,20 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
     const invoiceNumber = await generateInvoiceNumber()
     const dueDate = new Date(joinDate)
     dueDate.setDate(dueDate.getDate() + 7)
+    const pkgLabel = input.rentPackage === 'semester' ? `Sem ${renewCurrentSem}` : input.rentPackage === 'monthly' ? 'Month 1' : 'Year 1'
     invoice = await prisma.invoice.create({
       data: {
         studentId: id,
         invoiceNumber,
         type: 'rent',
-        description: `Renewal — first ${input.rentPackage} fee`,
+        description: `Renewal — first ${input.rentPackage} fee (${pkgLabel})`,
         amount: feeAmount,
         totalAmount: feeAmount,
         balance: feeAmount,
         dueDate,
         generatedBy: adminId,
         status: 'due',
+        semesterNumber: input.rentPackage === 'semester' ? renewCurrentSem : undefined,
       },
     })
   }

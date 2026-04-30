@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express'
+import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../config/prisma'
 import { ApiError } from '../middleware/error.middleware'
 import {
@@ -7,7 +7,7 @@ import {
 } from '../services/notification.service'
 import { env } from '../config/env'
 
-// Student portal â€” get home page data (all in one call for performance)
+// Student portal — get home page data (all in one call for performance)
 export async function getHomeData(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id
@@ -59,7 +59,7 @@ export async function getHomeData(req: Request, res: Response, next: NextFunctio
   } catch (err) { next(err) }
 }
 
-// Student portal â€” get own profile
+// Student portal — get own profile
 export async function getMyProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const student = await prisma.student.findUnique({
@@ -77,7 +77,7 @@ export async function getMyProfile(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// Student portal â€” get own invoices
+// Student portal — get own invoices
 export async function getMyInvoices(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const invoices = await prisma.invoice.findMany({
@@ -91,7 +91,7 @@ export async function getMyInvoices(req: Request, res: Response, next: NextFunct
   }
 }
 
-// Student portal â€” get own complaints
+// Student portal — get own complaints
 export async function getMyComplaints(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const complaints = await prisma.complaint.findMany({
@@ -105,7 +105,7 @@ export async function getMyComplaints(req: Request, res: Response, next: NextFun
   }
 }
 
-// Student portal â€” get own outpasses
+// Student portal — get own outpasses
 export async function getMyOutpasses(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const outpasses = await prisma.outpass.findMany({
@@ -118,7 +118,7 @@ export async function getMyOutpasses(req: Request, res: Response, next: NextFunc
   }
 }
 
-// Student portal â€” get notices
+// Student portal — get notices
 export async function getPublishedNotices(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const notices = await prisma.notice.findMany({
@@ -132,7 +132,7 @@ export async function getPublishedNotices(_req: Request, res: Response, next: Ne
   }
 }
 
-// Student portal â€” get today's food menu
+// Student portal — get today's food menu
 export async function getMyFoodMenu(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const student = await prisma.student.findUnique({
@@ -177,7 +177,7 @@ export async function getMyFoodMenu(req: Request, res: Response, next: NextFunct
   }
 }
 
-// Parent portal â€” get child info
+// Parent portal — get child info
 export async function getChildInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const parent = await prisma.parent.findUnique({
@@ -199,7 +199,7 @@ export async function getChildInfo(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// Student portal â€” get full fee structure (all semesters)
+// Student portal — get full fee structure (all semesters)
 export async function getMyFeeStructure(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id
@@ -222,109 +222,99 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     const rentPackage = student.rentPackage
     const depositAmount = Number(student.depositAmount ?? 5000)
 
-    // Fee per semester based on rent package
-    let feePerSem = 0
-    if (rentPackage === 'semester') feePerSem = Number(room?.semesterRent ?? 0)
-    else if (rentPackage === 'monthly') feePerSem = Number(room?.monthlyRent ?? 0) * 6
-    else if (rentPackage === 'annual') feePerSem = Number(room?.annualRent ?? 0) / 2
+    // Fee per period based on rent package
+    let feePerPeriod = 0
+    if (rentPackage === 'semester') feePerPeriod = Number(room?.semesterRent ?? 0)
+    else if (rentPackage === 'monthly') feePerPeriod = Number(room?.monthlyRent ?? 0)
+    else if (rentPackage === 'annual') feePerPeriod = Number(room?.annualRent ?? 0)
+    const feePerSem = feePerPeriod
 
-    // Sem 1 always includes deposit
     const sem1Total = feePerSem + depositAmount
-
-    // Map invoices to semesters by semesterNumber
     const rentInvoices = student.invoices.filter(i => i.type === 'rent')
 
-    // Build semester rows
-    const semesters = Array.from({ length: totalSems }, (_, i) => {
-      const sem = i + 1
-      const isFirstSem = sem === 1
+    type PeriodRow = {
+      sem: number; feeAmount: number; status: string
+      invoice: { id: string; invoiceNumber: string; totalAmount: number; paidAmount: number; balance: number; dueDate: Date; lateFee: number; payments: Array<{ id: string; receiptNumber: string; amount: number; paidDate: Date; paymentMode: string; transactionRef?: string | null }> } | null
+      paidAmount: number; balance: number; canPayWithoutInvoice: boolean
+    }
 
-      // Find invoice for this semester â€” by semesterNumber first, then by order
-      const invoice = rentInvoices.find(inv => {
-        const invSem = (inv as { semesterNumber?: number }).semesterNumber
-        if (invSem) return invSem === sem
-        return rentInvoices.indexOf(inv) === i
+    let semesters: PeriodRow[]
+
+    if (rentPackage === 'semester') {
+      semesters = Array.from({ length: totalSems }, (_, i) => {
+        const sem = i + 1
+        const isFirstSem = sem === 1
+        const invoice = rentInvoices.find(inv => {
+          const invSem = (inv as { semesterNumber?: number }).semesterNumber
+          if (invSem) return invSem === sem
+          return rentInvoices.indexOf(inv) === i
+        })
+        const expectedFee = isFirstSem ? sem1Total : feePerSem
+        let status: string
+        if (invoice) { status = invoice.status }
+        else if (sem < currentSem) { status = 'paid' }
+        else if (sem === currentSem) { status = 'current' }
+        else { status = 'upcoming' }
+        const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? expectedFee : 0)
+        const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : expectedFee)
+        return {
+          sem, feeAmount: expectedFee, status,
+          invoice: invoice ? {
+            id: invoice.id, invoiceNumber: invoice.invoiceNumber,
+            totalAmount: Number(invoice.totalAmount), paidAmount, balance,
+            dueDate: invoice.dueDate, lateFee: Number(invoice.lateFee ?? 0),
+            payments: invoice.payments.map(p => ({ id: p.id, receiptNumber: p.receiptNumber, amount: Number(p.amount), paymentMode: p.paymentMode, transactionRef: p.transactionRef, paidDate: p.paidDate })),
+          } : null,
+          paidAmount, balance,
+          canPayWithoutInvoice: !invoice && sem === currentSem && expectedFee > 0,
+        }
       })
-
-      // The expected fee for this sem (sem 1 includes deposit)
-      const expectedFee = isFirstSem ? sem1Total : feePerSem
-
-      let status: 'paid' | 'partial' | 'due' | 'overdue' | 'upcoming' | 'current'
-      if (invoice) {
-        status = invoice.status as 'paid' | 'partial' | 'due' | 'overdue'
-      } else if (sem < currentSem) {
-        // No invoice for past sem — show as 'no_record' but treat as paid for summary
-        status = 'paid'
-      } else if (sem === currentSem) {
-        status = 'current'
-      } else {
-        status = 'upcoming'
+    } else {
+      // Monthly / Annual: show actual invoices as billing periods
+      semesters = rentInvoices.map((invoice, i) => {
+        const paidAmount = Number(invoice.paidAmount)
+        const balance = Number(invoice.balance)
+        return {
+          sem: i + 1, feeAmount: Number(invoice.totalAmount), status: invoice.status,
+          invoice: {
+            id: invoice.id, invoiceNumber: invoice.invoiceNumber,
+            totalAmount: Number(invoice.totalAmount), paidAmount, balance,
+            dueDate: invoice.dueDate, lateFee: Number(invoice.lateFee ?? 0),
+            payments: invoice.payments.map(p => ({ id: p.id, receiptNumber: p.receiptNumber, amount: Number(p.amount), paymentMode: p.paymentMode, transactionRef: p.transactionRef, paidDate: p.paidDate })),
+          },
+          paidAmount, balance, canPayWithoutInvoice: false,
+        }
+      })
+      if (semesters.length === 0) {
+        const expectedFee = feePerSem + depositAmount
+        semesters = [{ sem: 1, feeAmount: expectedFee, status: 'current', invoice: null, paidAmount: 0, balance: expectedFee, canPayWithoutInvoice: true }]
       }
+    }
 
-      const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? expectedFee : 0)
-      const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : expectedFee)
-
-      return {
-        sem,
-        feeAmount: expectedFee,
-        status,
-        invoice: invoice ? {
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          totalAmount: Number(invoice.totalAmount),
-          paidAmount,
-          balance,
-          dueDate: invoice.dueDate,
-          lateFee: Number(invoice.lateFee ?? 0),
-          payments: invoice.payments.map(p => ({
-            id: p.id,
-            receiptNumber: p.receiptNumber,
-            amount: Number(p.amount),
-            paymentMode: p.paymentMode,
-            transactionRef: p.transactionRef,
-            paidDate: p.paidDate,
-          })),
-        } : null,
-        paidAmount,
-        balance,
-        canPayWithoutInvoice: !invoice && sem === currentSem && expectedFee > 0,
-      }
-    })
-
-    // Other (non-rent) invoices
     const otherInvoices = student.invoices
       .filter(i => i.type !== 'rent')
       .map(i => ({
-        id: i.id,
-        invoiceNumber: i.invoiceNumber,
-        type: i.type,
-        description: i.description,
-        totalAmount: Number(i.totalAmount),
-        paidAmount: Number(i.paidAmount),
-        balance: Number(i.balance),
-        status: i.status,
-        dueDate: i.dueDate,
+        id: i.id, invoiceNumber: i.invoiceNumber, type: i.type, description: i.description,
+        totalAmount: Number(i.totalAmount), paidAmount: Number(i.paidAmount),
+        balance: Number(i.balance), status: i.status, dueDate: i.dueDate,
         lateFee: Number(i.lateFee ?? 0),
-        payments: i.payments.map(p => ({
-          id: p.id,
-          receiptNumber: p.receiptNumber,
-          amount: Number(p.amount),
-          paymentMode: p.paymentMode,
-          transactionRef: p.transactionRef,
-          paidDate: p.paidDate,
-        })),
+        payments: i.payments.map(p => ({ id: p.id, receiptNumber: p.receiptNumber, amount: Number(p.amount), paymentMode: p.paymentMode, transactionRef: p.transactionRef, paidDate: p.paidDate })),
       }))
 
-    // Total course fee = sem1 (with deposit) + remaining sems
-    // sem1Total already includes deposit, so: sem1Total + (totalSems-1) * feePerSem
-    const totalCourseFee = sem1Total + feePerSem * (totalSems - 1)
+    // Total course fee
+    let totalCourseFee: number
+    if (rentPackage === 'semester') {
+      totalCourseFee = feePerSem * totalSems + depositAmount
+    } else {
+      const allRentInvoices = student.invoices.filter(i => i.type === 'rent')
+      const invoiceTotal = allRentInvoices.reduce((s, i) => s + Number(i.totalAmount), 0)
+      totalCourseFee = invoiceTotal > 0 ? invoiceTotal : feePerSem + depositAmount
+    }
 
-    // totalPaid = sum of actual payments recorded (not estimated)
+    // totalPaid = only verified payments
     const allPayments = await prisma.payment.findMany({
       where: {
-        studentId,
-        utrRejected: false,
-        // Only count verified payments (cash/online auto-verified, UTR must be verified)
+        studentId, utrRejected: false,
         OR: [
           { paymentMode: 'cash' },
           { paymentMode: 'online', utrVerified: true },
@@ -336,57 +326,24 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     })
     const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0)
 
-    // totalDue = sum of all open invoice balances
     const totalDue = semesters
       .filter(r => ['due', 'overdue', 'partial', 'current'].includes(r.status))
       .reduce((s, r) => s + r.balance, 0)
       + otherInvoices.filter(i => ['due', 'overdue', 'partial'].includes(i.status))
           .reduce((s, i) => s + i.balance, 0)
 
-    // Auto-renew: if stay expired but current sem fee is paid, mark student active
-    const stayExpired = new Date(student.stayEndDate) < new Date()
-    if (stayExpired && student.status === 'active') {
-      const currentSemRow = semesters.find(s => s.sem === currentSem)
-      if (currentSemRow?.status === 'paid') {
-        // Stay is expired but fee is paid â€” extend stay by one semester period
-        const newEndDate = new Date(student.stayEndDate)
-        newEndDate.setMonth(newEndDate.getMonth() + 6) // extend 6 months
-        await prisma.student.update({
-          where: { id: studentId },
-          data: { stayEndDate: newEndDate, updatedAt: new Date() },
-        }).catch(() => {})
-      }
-    }
-
     res.json({
       success: true,
       data: {
         student: {
-          name: student.name,
-          studentId: student.studentId,
-          course: student.course,
-          branch: student.branch,
-          currentSem,
-          totalSems,
-          rentPackage,
-          feePerSem,
-          depositAmount,
-          joiningDate: student.joiningDate,
-          stayEndDate: student.stayEndDate,
+          name: student.name, studentId: student.studentId,
+          course: student.course, branch: student.branch,
+          currentSem, totalSems, rentPackage, feePerSem, depositAmount,
+          joiningDate: student.joiningDate, stayEndDate: student.stayEndDate,
         },
-        room: room ? {
-          roomNumber: room.roomNumber,
-          roomType: room.roomType,
-          pgName: room.branch?.name ?? 'PG Hostel',
-        } : null,
-        semesters,
-        otherInvoices,
-        summary: {
-          totalCourseFee,
-          totalPaid,
-          totalDue,
-          depositAmount,
-        },
+        room: room ? { roomNumber: room.roomNumber, roomType: room.roomType, pgName: room.branch?.name ?? 'PG Hostel' } : null,
+        semesters, otherInvoices,
+        summary: { totalCourseFee, totalPaid, totalDue, depositAmount },
       },
     })
   } catch (err) { next(err) }
@@ -402,7 +359,7 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
 
     if (!amount || amount <= 0) throw new ApiError(400, 'Amount must be positive')
 
-    // â”€â”€ ONLINE PAYMENT REQUEST (no UTR â€” just requesting admin approval) â”€â”€
+    // ── ONLINE PAYMENT REQUEST (no UTR — just requesting admin approval) ──
     if (requiresApproval || paymentMode === 'online') {
       let targetInvoiceId = invoiceId
 
@@ -482,7 +439,7 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
       return
     }
 
-    // â”€â”€ UTR PAYMENT (UPI/Bank transfer) â”€â”€
+    // ── UTR PAYMENT (UPI/Bank transfer) ──
     if (!transactionRef) throw new ApiError(400, 'transactionRef required for UPI/bank payments')
 
     const normalizedUtr = transactionRef.trim().toUpperCase()
@@ -583,7 +540,7 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
           notes: 'PENDING_VERIFICATION - submitted by student via portal',
         },
       })
-      // ⚠️ DO NOT update invoice balance here — only update after admin verifies
+      // ?? DO NOT update invoice balance here � only update after admin verifies
       // Invoice stays as 'due' until admin verifies the UTR
       // This prevents showing fee as paid before verification
     })
@@ -661,7 +618,7 @@ export async function createSemInvoice(req: Request, res: Response, next: NextFu
     dueDate.setDate(dueDate.getDate() + 7)
 
     const description = semNumber === 1
-      ? `Semester 1 fee + Security deposit (₹${depositAmt})`
+      ? `Semester 1 fee + Security deposit (?${depositAmt})`
       : `Semester ${semNumber} fee`
 
     const invoice = await prisma.invoice.create({

@@ -46,9 +46,10 @@ export function stayEndDate(
 }
 
 /**
- * Calculate stay end date based on semester logic.
- * Each semester = 6 months. Stay ends after remaining semesters complete.
- * e.g. Year 1 Sem 1 of 8 total → 7 remaining sems × 6 months = 42 months from joining
+ * Calculate stay end date based on rent package.
+ * - semester: each semester = 6 months, stay = remaining sems × 6 months
+ * - monthly: stay = explicit months (joiningDate + months)
+ * - annual: stay = explicit years (joiningDate + years)
  */
 export function stayEndDateFromSemesters(
   joinDate: Date,
@@ -60,6 +61,24 @@ export function stayEndDateFromSemesters(
   const remainingSems = Math.max(1, totalSems - currentSem + 1)
   // Each semester = 6 months
   return addMonths(ist, remainingSems * 6)
+}
+
+/**
+ * Calculate stay end date for monthly package.
+ * stayMonths = number of months the student will stay
+ */
+export function stayEndDateMonthly(joinDate: Date, stayMonths: number): Date {
+  const ist = toZonedTime(joinDate, TZ)
+  return addMonths(ist, Math.max(1, stayMonths))
+}
+
+/**
+ * Calculate stay end date for annual package.
+ * stayYears = number of years the student will stay
+ */
+export function stayEndDateAnnual(joinDate: Date, stayYears: number): Date {
+  const ist = toZonedTime(joinDate, TZ)
+  return addYears(ist, Math.max(1, stayYears))
 }
 
 export function isDueSoon(dueDate: Date, days: number): boolean {

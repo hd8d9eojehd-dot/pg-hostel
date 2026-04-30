@@ -23,8 +23,8 @@ const DEPOSIT_AMOUNT = 5000
 function calcFeePerSem(rentPackage: string, room: { monthlyRent?: number; semesterRent?: number; annualRent?: number } | null): number {
   if (!room) return 0
   if (rentPackage === 'semester') return Number(room.semesterRent ?? 0)
-  if (rentPackage === 'monthly') return Number(room.monthlyRent ?? 0) * 6
-  if (rentPackage === 'annual') return Number(room.annualRent ?? 0) / 2
+  if (rentPackage === 'monthly') return Number(room.monthlyRent ?? 0)
+  if (rentPackage === 'annual') return Number(room.annualRent ?? 0)
   return 0
 }
 
@@ -293,7 +293,7 @@ export default function NewStudentPage() {
             </CardContent>
           </Card>
 
-          {/* Stay Info — stay end date auto-calculated from semesters */}
+          {/* Stay Info — stay end date auto-calculated from package */}
           <Card>
             <CardHeader><CardTitle className="text-base">🏠 Stay Details</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-4">
@@ -305,19 +305,44 @@ export default function NewStudentPage() {
               <div className="space-y-1.5">
                 <Label>Rent Package <span className="text-destructive">*</span></Label>
                 <select {...register('rentPackage')} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                  {RENT_PACKAGE.map(p => <option key={p} value={p}>{p}</option>)}
+                  {RENT_PACKAGE.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
                 </select>
               </div>
               <F label="Deposit Amount (Rs.)" name="depositAmount" type="number" required />
-              <div className="space-y-1.5">
-                <Label>Stay End Date <span className="text-xs text-gray-400">(auto-calculated)</span></Label>
-                <div className="h-10 rounded-lg border border-input bg-gray-50 px-3 flex items-center text-sm text-gray-500">
-                  {totalSemesters > 0 && currentSemester > 0
-                    ? `${(totalSemesters - currentSemester + 1) * 6} months from joining`
-                    : 'Set year/sems above'}
+              {/* Stay duration input — depends on package */}
+              {rentPackage === 'semester' && (
+                <div className="space-y-1.5">
+                  <Label>Stay End Date <span className="text-xs text-gray-400">(auto-calculated)</span></Label>
+                  <div className="h-10 rounded-lg border border-input bg-gray-50 px-3 flex items-center text-sm text-gray-500">
+                    {totalSemesters > 0 && currentSemester > 0
+                      ? `${(totalSemesters - currentSemester + 1) * 6} months from joining`
+                      : 'Set year/sems above'}
+                  </div>
+                  <p className="text-xs text-gray-400">= {totalSemesters - currentSemester + 1} remaining sems × 6 months each</p>
                 </div>
-                <p className="text-xs text-gray-400">= {totalSemesters - currentSemester + 1} remaining sems × 6 months each</p>
-              </div>
+              )}
+              {rentPackage === 'monthly' && (
+                <div className="space-y-1.5">
+                  <Label>Stay Duration (months) <span className="text-destructive">*</span></Label>
+                  <Input type="number" min={1} max={60}
+                    {...register('stayMonths' as keyof CreateStudentInput, { valueAsNumber: true })}
+                    placeholder="12"
+                    defaultValue={12}
+                  />
+                  <p className="text-xs text-gray-400">e.g. 12 = 1 year, 6 = 6 months. Fee billed monthly.</p>
+                </div>
+              )}
+              {rentPackage === 'annual' && (
+                <div className="space-y-1.5">
+                  <Label>Stay Duration (years) <span className="text-destructive">*</span></Label>
+                  <Input type="number" min={1} max={10}
+                    {...register('stayYears' as keyof CreateStudentInput, { valueAsNumber: true })}
+                    placeholder="1"
+                    defaultValue={1}
+                  />
+                  <p className="text-xs text-gray-400">e.g. 1 = 1 year, 2 = 2 years. Fee billed annually.</p>
+                </div>
+              )}
               <div className="sm:col-span-2 space-y-1.5">
                 <Label>Notes</Label>
                 <Textarea {...register('notes')} placeholder="Any additional notes..." />
@@ -359,8 +384,8 @@ export default function NewStudentPage() {
             </CardContent>
           </Card>
 
-          {/* Full Course Fee Structure */}
-          {selectedRoom && feePerSem > 0 && (
+          {/* Full Course Fee Structure — only for semester package */}
+          {selectedRoom && feePerSem > 0 && rentPackage === 'semester' && (
             <Card className="border-blue-200">
               <CardHeader><CardTitle className="text-base">📊 Full Course Fee Structure</CardTitle></CardHeader>
               <CardContent className="space-y-3">
@@ -432,15 +457,17 @@ export default function NewStudentPage() {
 
           {/* Fee Payment */}
           <Card className="border-indigo-200">
-            <CardHeader><CardTitle className="text-base">💳 First Semester Fee Payment</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">💳 First {rentPackage === 'monthly' ? 'Month' : rentPackage === 'annual' ? 'Year' : 'Semester'} Fee Payment</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {selectedRoom && feePerSem > 0 && (
                 <div className="p-3 bg-indigo-50 rounded-xl text-sm text-indigo-800 space-y-1">
-                  <p>Sem {currentSemester} fee: <strong>{formatCurrency(feePerSem)}</strong></p>
+                  <p>{rentPackage === 'monthly' ? 'Monthly' : rentPackage === 'annual' ? 'Annual' : `Sem ${currentSemester}`} fee: <strong>{formatCurrency(feePerSem)}</strong></p>
                   <p>Security deposit: <strong>{formatCurrency(Number(depositAmount))}</strong></p>
                   <p className="font-bold text-indigo-900 border-t border-indigo-200 pt-1 mt-1">
                     Total to collect: <strong>{formatCurrency(totalToCollect)}</strong>
                   </p>
+                  {rentPackage === 'monthly' && <p className="text-xs text-indigo-600">Subsequent months: {formatCurrency(feePerSem)}/month</p>}
+                  {rentPackage === 'annual' && <p className="text-xs text-indigo-600">Subsequent years: {formatCurrency(feePerSem)}/year</p>}
                 </div>
               )}
 

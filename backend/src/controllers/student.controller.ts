@@ -409,8 +409,8 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
         if (fullStudent.room) {
           let feePerSem = 0
           if (fullStudent.rentPackage === 'semester') feePerSem = Number(fullStudent.room.semesterRent ?? 0)
-          else if (fullStudent.rentPackage === 'monthly') feePerSem = Number(fullStudent.room.monthlyRent ?? 0) * 6
-          else if (fullStudent.rentPackage === 'annual') feePerSem = Number(fullStudent.room.annualRent ?? 0) / 2
+          else if (fullStudent.rentPackage === 'monthly') feePerSem = Number(fullStudent.room.monthlyRent ?? 0)
+          else if (fullStudent.rentPackage === 'annual') feePerSem = Number(fullStudent.room.annualRent ?? 0)
 
           if (feePerSem > 0) {
             const existing = await prisma.invoice.findFirst({
@@ -661,13 +661,15 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
           },
         })
 
-        // 2. Calculate fee for new semester
+        // 2. Calculate fee for new semester (semester package only)
         let feePerSem = 0
         const room = student.room
-        if (room) {
-          if (student.rentPackage === 'semester') feePerSem = Number(room.semesterRent ?? 0)
-          else if (student.rentPackage === 'monthly') feePerSem = Number(room.monthlyRent ?? 0) * 6
-          else if (student.rentPackage === 'annual') feePerSem = Number(room.annualRent ?? 0) / 2
+        if (room && student.rentPackage === 'semester') {
+          feePerSem = Number(room.semesterRent ?? 0)
+        } else if (room && student.rentPackage === 'monthly') {
+          feePerSem = Number(room.monthlyRent ?? 0) // per month
+        } else if (room && student.rentPackage === 'annual') {
+          feePerSem = Number(room.annualRent ?? 0) // per year
         }
 
         // 3. Check if invoice already exists for new semester
