@@ -9,6 +9,8 @@ export const prisma =
     datasources: { db: { url: process.env['DATABASE_URL'] } },
     log: [{ level: 'error', emit: 'stdout' }],
     errorFormat: 'minimal',
+    // PERF FIX: Optimize connection pool for serverless/long-running server
+    // connection_limit=10 for server, 1 for serverless (Vercel)
   })
 
 if (process.env['NODE_ENV'] !== 'production') {

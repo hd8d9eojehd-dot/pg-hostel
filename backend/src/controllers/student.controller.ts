@@ -643,89 +643,98 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
     let updated = 0
     let invoicesCreated = 0
 
+    // PERF FIX: Batch all student updates in a single transaction instead of N sequential queries
+    const studentUpdates: Array<{ id: string; newStayEnd: Date; newDuration: string }> = []
+    const invoicesToCreate: Array<{
+      studentId: string; invoiceNumber: string; feePerSem: number; newSem: number
+    }> = []
+
+    // Pre-compute all updates
     for (const student of students) {
-      try {
-        // 1. Update semester AND recalculate stayEndDate
-        const { stayEndDateFromSemesters } = await import('../utils/indianTime')
-        const totalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
-        const newStayEnd = stayEndDateFromSemesters(new Date((student as { joiningDate: Date }).joiningDate), newSem, totalSems)
-        const newDuration = `${(totalSems - newSem + 1) * 6}months`
+      const { stayEndDateFromSemesters } = await import('../utils/indianTime')
+      const totalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
+      const newStayEnd = stayEndDateFromSemesters(new Date((student as { joiningDate: Date }).joiningDate), newSem, totalSems)
+      const newDuration = `${(totalSems - newSem + 1) * 6}months`
+      studentUpdates.push({ id: student.id, newStayEnd, newDuration })
 
-        await prisma.student.update({
-          where: { id: student.id },
-          data: {
-            semester: newSem,
-            stayEndDate: newStayEnd,
-            stayDuration: newDuration,
-            updatedAt: new Date(),
-          },
+      // Calculate fee
+      let feePerSem = 0
+      const room = student.room
+      if (room && student.rentPackage === 'semester') {
+        feePerSem = Number(room.semesterRent ?? 0)
+      } else if (room && student.rentPackage === 'monthly') {
+        feePerSem = Number(room.monthlyRent ?? 0)
+      } else if (room && student.rentPackage === 'annual') {
+        feePerSem = Number(room.annualRent ?? 0)
+      }
+
+      if (feePerSem > 0) {
+        const { generateInvoiceNumber } = await import('../utils/studentId')
+        const invoiceNumber = await generateInvoiceNumber()
+        invoicesToCreate.push({ studentId: student.id, invoiceNumber, feePerSem, newSem })
+      }
+    }
+
+    // PERF FIX: Check existing invoices in one batch query
+    const existingInvoices = await prisma.invoice.findMany({
+      where: {
+        studentId: { in: students.map(s => s.id) },
+        type: 'rent',
+        semesterNumber: newSem,
+      },
+      select: { studentId: true },
+    })
+    const studentsWithInvoice = new Set(existingInvoices.map(i => i.studentId))
+
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + 7)
+
+    // PERF FIX: Execute all updates in a single transaction
+    await prisma.$transaction(async (tx) => {
+      // Batch update all students
+      for (const upd of studentUpdates) {
+        await tx.student.update({
+          where: { id: upd.id },
+          data: { semester: newSem, stayEndDate: upd.newStayEnd, stayDuration: upd.newDuration, updatedAt: new Date() },
         })
+        updated++
+      }
 
-        // 2. Calculate fee for new semester (semester package only)
-        let feePerSem = 0
-        const room = student.room
-        if (room && student.rentPackage === 'semester') {
-          feePerSem = Number(room.semesterRent ?? 0)
-        } else if (room && student.rentPackage === 'monthly') {
-          feePerSem = Number(room.monthlyRent ?? 0) // per month
-        } else if (room && student.rentPackage === 'annual') {
-          feePerSem = Number(room.annualRent ?? 0) // per year
-        }
-
-        // 3. Check if invoice already exists for new semester
-        const existingInvoice = await prisma.invoice.findFirst({
-          where: { studentId: student.id, type: 'rent', semesterNumber: newSem },
-        })
-
-        if (!existingInvoice && feePerSem > 0) {
-          const { generateInvoiceNumber } = await import('../utils/studentId')
-          const invoiceNumber = await generateInvoiceNumber()
-          const dueDate = new Date()
-          dueDate.setDate(dueDate.getDate() + 7) // due in 7 days
-
-          await prisma.invoice.create({
+      // Batch create invoices for students that don't have one yet
+      for (const inv of invoicesToCreate) {
+        if (!studentsWithInvoice.has(inv.studentId)) {
+          await tx.invoice.create({
             data: {
-              studentId: student.id,
-              invoiceNumber,
+              studentId: inv.studentId,
+              invoiceNumber: inv.invoiceNumber,
               type: 'rent',
-              description: `Semester ${newSem} fee`,
-              amount: feePerSem,
-              totalAmount: feePerSem,
-              balance: feePerSem,
+              description: `Semester ${inv.newSem} fee`,
+              amount: inv.feePerSem,
+              totalAmount: inv.feePerSem,
+              balance: inv.feePerSem,
               dueDate,
               status: 'due',
-              semesterNumber: newSem,
+              semesterNumber: inv.newSem,
               generatedBy: adminId,
             },
           })
           invoicesCreated++
         }
-
-        // 4. Activity log
-        await prisma.activityLog.create({
-          data: {
-            actorId: adminId,
-            actorType: 'admin',
-            action: 'UPDATED',
-            entityType: 'student',
-            entityId: student.id,
-            meta: {
-              action: 'semester_advanced',
-              from: currentSem,
-              to: newSem,
-              course,
-              branch,
-            },
-          },
-        })
-
-        updated++
-      } catch (err) {
-        // Log individual failures but continue with others
-        const { logger } = await import('../utils/logger')
-        logger.error(`Bulk semester advance failed for ${student.studentId}:`, err)
       }
-    }
+
+      // Batch activity logs
+      await tx.activityLog.createMany({
+        data: students.map(s => ({
+          actorId: adminId,
+          actorType: 'admin',
+          action: 'UPDATED',
+          entityType: 'student',
+          entityId: s.id,
+          meta: { action: 'semester_advanced', from: currentSem, to: newSem, course, branch },
+        })),
+        skipDuplicates: true,
+      })
+    })
 
     res.json({
       success: true,

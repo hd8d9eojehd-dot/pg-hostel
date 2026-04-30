@@ -540,7 +540,7 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
           notes: 'PENDING_VERIFICATION - submitted by student via portal',
         },
       })
-      // ?? DO NOT update invoice balance here — only update after admin verifies
+      // ?? DO NOT update invoice balance here ï¿½ only update after admin verifies
       // Invoice stays as 'due' until admin verifies the UTR
       // This prevents showing fee as paid before verification
     })
@@ -662,18 +662,26 @@ export async function getMyPendingPayments(req: Request, res: Response, next: Ne
 // Get UPI/Bank payment details for student portal
 export async function getPaymentDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    // PERF FIX: Single query with nested include instead of 2 sequential queries
     const student = await prisma.student.findUnique({
       where: { id: req.user!.id },
-      select: { room: { select: { branchId: true } } },
+      select: {
+        room: {
+          select: {
+            branchId: true,
+            branch: {
+              select: {
+                settings: { select: { staffPermissions: true } },
+              },
+            },
+          },
+        },
+      },
     })
     const branchId = student?.room?.branchId
     if (!branchId) { res.json({ success: true, data: null }); return }
 
-    const settings = await prisma.settings.findUnique({
-      where: { branchId },
-      select: { staffPermissions: true },
-    })
-    const perms = (settings?.staffPermissions as Record<string, unknown>) ?? {}
+    const perms = (student?.room?.branch?.settings?.staffPermissions as Record<string, unknown>) ?? {}
     const paymentDetails = (perms['paymentDetails'] as Record<string, string> | undefined) ?? null
     res.json({ success: true, data: paymentDetails })
   } catch (err) { next(err) }

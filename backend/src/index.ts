@@ -9,6 +9,8 @@ import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import morgan from 'morgan'
+// PERF FIX: gzip/brotli compression — reduces response size 3-5x
+import compression from 'compression'
 
 import { env } from './config/env'
 import { prisma, connectPrisma, disconnectPrisma } from './config/prisma'
@@ -23,6 +25,18 @@ import { loggerMiddleware } from './middleware/logger.middleware'
 import { generalLimiter } from './middleware/rateLimit.middleware'
 import { logger } from './utils/logger'
 const app = express()
+
+// PERF FIX: Enable gzip compression on all responses — must be first middleware
+app.use(compression({
+  level: 6, // balance between speed and compression ratio
+  threshold: 1024, // only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress PDF/image responses
+    const ct = res.getHeader('Content-Type') as string ?? ''
+    if (ct.includes('application/pdf') || ct.includes('image/')) return false
+    return compression.filter(req, res)
+  },
+}))
 
 // ─── Security ────────────────────────────────────────────
 app.use(helmet({
@@ -48,6 +62,8 @@ app.use(generalLimiter)
 
 // ─── Health check ────────────────────────────────────────
 app.get('/health', (_req, res) => {
+  // PERF FIX: Cache health check for 10s to reduce DB load
+  res.setHeader('Cache-Control', 'public, max-age=10')
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -112,6 +128,29 @@ async function runMigrations(): Promise<void> {
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS utr_rejected BOOLEAN DEFAULT false`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS utr_rejected_reason VARCHAR(200)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_transaction_ref ON payments(transaction_ref) WHERE transaction_ref IS NOT NULL`,
+    // PERF FIX: Critical indexes for hot query paths
+    `CREATE INDEX IF NOT EXISTS idx_students_status ON students(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_students_room_id ON students(room_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_students_supabase_auth_id ON students(supabase_auth_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_invoices_student_id ON invoices(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_invoices_student_status ON invoices(student_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_invoices_semester_number ON invoices(student_id, semester_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON payments(paid_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_utr_pending ON payments(utr_verified, utr_rejected) WHERE utr_verified = false AND utr_rejected = false`,
+    `CREATE INDEX IF NOT EXISTS idx_complaints_student_id ON complaints(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_outpass_student_id ON outpass(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_outpass_status ON outpass(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_notices_published ON notices(is_published, published_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_student_id ON whatsapp_logs(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_students_stay_end_date ON students(stay_end_date) WHERE status = 'active'`,
+    `CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_rooms_branch_id ON rooms(branch_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_beds_room_id ON beds(room_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_beds_is_occupied ON beds(is_occupied)`,
     `CREATE TABLE IF NOT EXISTS semester_periods (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), branch_id UUID NOT NULL REFERENCES branches(id), sem_number INTEGER NOT NULL, year INTEGER NOT NULL, start_date DATE NOT NULL, end_date DATE NOT NULL, is_active BOOLEAN DEFAULT true, auto_outpass BOOLEAN DEFAULT false, created_by UUID, created_at TIMESTAMPTZ DEFAULT now(), UNIQUE(branch_id, sem_number, year))`,
   ]
 

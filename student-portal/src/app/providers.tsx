@@ -6,12 +6,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 2 * 60_000,
-        gcTime: 10 * 60_000,
-        retry: 2,
-        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+        // PERF FIX: Increase stale time — student data changes infrequently
+        staleTime: 5 * 60_000,    // 5 min (was 2 min)
+        gcTime: 15 * 60_000,      // 15 min (was 10 min)
+        retry: 1,                  // PERF FIX: Reduce retries
+        retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 5000),
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,
+        // PERF FIX: Show stale data immediately while refetching
+        placeholderData: (prev: unknown) => prev,
+      },
+      mutations: {
+        retry: 0,
       },
     },
   }))

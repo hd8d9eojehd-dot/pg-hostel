@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../config/supabase'
 import { prisma, withRetry } from '../config/prisma'
 import { ApiError } from './error.middleware'
+import { redis } from '../config/redis'
 
 export interface AuthUser {
   id: string
@@ -18,6 +19,27 @@ declare global {
       user?: AuthUser
     }
   }
+}
+
+// PERF FIX: Cache auth lookups in Redis for 5 minutes to avoid 3 DB queries per request
+const AUTH_CACHE_TTL = 300 // 5 minutes
+
+async function getCachedUser(supabaseId: string): Promise<AuthUser | null> {
+  try {
+    const cached = await redis.get(`auth:${supabaseId}`)
+    if (cached) return JSON.parse(cached) as AuthUser
+  } catch { /* Redis unavailable — fall through to DB */ }
+  return null
+}
+
+async function setCachedUser(supabaseId: string, user: AuthUser): Promise<void> {
+  try {
+    await redis.setex(`auth:${supabaseId}`, AUTH_CACHE_TTL, JSON.stringify(user))
+  } catch { /* Redis unavailable — non-fatal */ }
+}
+
+export async function invalidateAuthCache(supabaseId: string): Promise<void> {
+  try { await redis.del(`auth:${supabaseId}`) } catch { /* non-fatal */ }
 }
 
 export async function authMiddleware(
@@ -38,33 +60,45 @@ export async function authMiddleware(
       throw new ApiError(401, 'Invalid or expired token')
     }
 
-    const admin = await withRetry(() => prisma.admin.findUnique({
-      where: { supabaseAuthId: user.id },
-      select: { id: true, role: true, branchId: true, isActive: true, supabaseAuthId: true },
-    }))
+    // PERF FIX: Check Redis cache first — avoids 3 sequential DB queries on every request
+    const cached = await getCachedUser(user.id)
+    if (cached) {
+      req.user = cached
+      return next()
+    }
+
+    // PERF FIX: Run all 3 user type lookups in parallel instead of sequential
+    const [admin, student, parent] = await Promise.all([
+      withRetry(() => prisma.admin.findUnique({
+        where: { supabaseAuthId: user.id },
+        select: { id: true, role: true, branchId: true, isActive: true, supabaseAuthId: true },
+      })),
+      withRetry(() => prisma.student.findUnique({
+        where: { supabaseAuthId: user.id },
+        select: { id: true, status: true, supabaseAuthId: true, isFirstLogin: true },
+      })),
+      withRetry(() => prisma.parent.findUnique({
+        where: { supabaseAuthId: user.id },
+        select: { id: true, supabaseAuthId: true },
+      })),
+    ])
+
+    let authUser: AuthUser | null = null
 
     if (admin) {
       if (!admin.isActive) throw new ApiError(403, 'Admin account is deactivated')
-      req.user = {
+      authUser = {
         id: admin.id,
         supabaseAuthId: admin.supabaseAuthId,
         role: admin.role as 'super_admin' | 'staff',
         branchId: admin.branchId,
         type: 'admin',
       }
-      return next()
-    }
-
-    const student = await withRetry(() => prisma.student.findUnique({
-      where: { supabaseAuthId: user.id },
-      select: { id: true, status: true, supabaseAuthId: true, isFirstLogin: true },
-    }))
-
-    if (student) {
+    } else if (student) {
       if (student.status === 'vacated' || student.status === 'suspended') {
         throw new ApiError(403, 'Student account is no longer active')
       }
-      req.user = {
+      authUser = {
         id: student.id,
         supabaseAuthId: student.supabaseAuthId ?? user.id,
         role: 'student',
@@ -72,26 +106,22 @@ export async function authMiddleware(
         type: 'student',
         isFirstLogin: student.isFirstLogin,
       }
-      return next()
-    }
-
-    const parent = await withRetry(() => prisma.parent.findUnique({
-      where: { supabaseAuthId: user.id },
-      select: { id: true, supabaseAuthId: true },
-    }))
-
-    if (parent) {
-      req.user = {
+    } else if (parent) {
+      authUser = {
         id: parent.id,
         supabaseAuthId: parent.supabaseAuthId ?? user.id,
         role: 'parent',
         branchId: null,
         type: 'parent',
       }
-      return next()
     }
 
-    throw new ApiError(401, 'User not found in system')
+    if (!authUser) throw new ApiError(401, 'User not found in system')
+
+    // PERF FIX: Cache the resolved user for 5 minutes
+    await setCachedUser(user.id, authUser)
+    req.user = authUser
+    return next()
   } catch (err) {
     next(err)
   }

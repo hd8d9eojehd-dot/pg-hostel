@@ -9,15 +9,18 @@ import {
   verifyUtrPayment, rejectUtrPayment, getPendingUtrPayments,
 } from '../controllers/finance.controller'
 import { createExtraCharge, getExtraCharges } from '../controllers/extraCharge.controller'
+// PERF FIX: Cache stable finance data
+import { cacheResponse } from '../middleware/cache.middleware'
 
 export const financeRouter = Router()
 
-financeRouter.get('/summary', requireAdmin, getFinanceSummary)
-financeRouter.get('/defaulters', requireAdmin, getDefaulters)
+// PERF FIX: Cache finance summary for 30s — expensive aggregation query
+financeRouter.get('/summary', requireAdmin, cacheResponse(30, req => `cache:finance:summary:${req.user?.branchId ?? 'all'}`), getFinanceSummary)
+// PERF FIX: Cache defaulters list for 60s
+financeRouter.get('/defaulters', requireAdmin, cacheResponse(60, req => `cache:finance:defaulters:${req.user?.branchId ?? 'all'}`), getDefaulters)
 financeRouter.get('/receipts/verify/:receiptNumber', verifyReceipt)
 financeRouter.get('/receipts/:receiptNumber', downloadReceipt)
 financeRouter.get('/payments/:paymentId/receipt', async (req, res, next) => {
-  // Redirect to receipt by payment ID
   try {
     const { prisma } = await import('../config/prisma')
     const payment = await prisma.payment.findUnique({ where: { id: req.params['paymentId'] }, select: { receiptNumber: true } })
@@ -33,7 +36,8 @@ financeRouter.patch('/invoices/:id/add-late-fee', requireAdmin, addLateFeeToInvo
 financeRouter.post('/payments', requireAdmin, validate(RecordPaymentSchema), recordPayment)
 financeRouter.post('/payments/:id/verify-utr', requireAdmin, verifyUtrPayment)
 financeRouter.post('/payments/:id/reject-utr', requireAdmin, rejectUtrPayment)
-financeRouter.get('/payments/pending-utr', requireAdmin, getPendingUtrPayments)
+// PERF FIX: Cache pending UTR list for 15s — refreshes frequently but not every request
+financeRouter.get('/payments/pending-utr', requireAdmin, cacheResponse(15, () => 'cache:finance:pending-utr'), getPendingUtrPayments)
 financeRouter.get('/extra-charges', requireAdmin, getExtraCharges)
 financeRouter.post('/extra-charges', requireAdmin, createExtraCharge)
 financeRouter.get('/student/:studentId', requireAdmin, getStudentInvoices)
