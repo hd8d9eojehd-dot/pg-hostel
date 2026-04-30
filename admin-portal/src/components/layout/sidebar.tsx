@@ -38,7 +38,9 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     queryKey: ['branch-name', user?.branchId],
     queryFn: () => api.get(`/settings/branch/${user?.branchId}`).then(r => r.data.data),
     enabled: !!user?.branchId,
-    staleTime: 60_000,
+    // PERF FIX: Branch name changes very rarely — cache for 10 minutes
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const pgName = branch?.name ?? 'PG Hostel'

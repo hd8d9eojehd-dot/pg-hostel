@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -27,11 +27,22 @@ function stayStatusBadge(daysLeft: number) {
 }
 
 export default function StudentsPage() {
+  const [searchInput, setSearchInput] = useState('')
+  // PERF FIX: Debounce search — wait 350ms after typing stops before firing API
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [feeFilter, setFeeFilter] = useState('')
   const [page, setPage] = useState(1)
   const LIMIT = 20
+
+  // PERF FIX: Debounce search input — prevents API call on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const { data, isLoading } = useQuery({
     queryKey: ['students', search, status, feeFilter, page],
@@ -55,8 +66,8 @@ export default function StudentsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
               placeholder="Search name, ID, mobile..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               className="pl-9 h-10"
             />
           </div>

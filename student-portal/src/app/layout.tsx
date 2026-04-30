@@ -4,7 +4,13 @@ import '@/styles/globals.css'
 import { Providers } from './providers'
 import { Toaster } from '@/components/ui/toaster'
 
-const inter = Inter({ subsets: ['latin'] })
+// PERF FIX: Load Inter via next/font — eliminates render-blocking @import, prevents FOIT
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+  weight: ['400', '500', '600', '700'],
+})
 
 export const metadata: Metadata = {
   title: { default: 'My PG', template: '%s | My PG' },

@@ -4,7 +4,16 @@ import '@/styles/globals.css'
 import { Providers } from './providers'
 import { Toaster } from '@/components/ui/toaster'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+// PERF FIX: Load Inter via next/font — preloads, self-hosts, and uses font-display:swap
+// This eliminates the render-blocking @import in globals.css and prevents FOIT
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+  preload: true,
+  // PERF FIX: Only load weights actually used — reduces font file size
+  weight: ['400', '500', '600', '700'],
+})
 
 export const metadata: Metadata = {
   title: { default: 'PG Hostel Admin', template: '%s | PG Hostel Admin' },

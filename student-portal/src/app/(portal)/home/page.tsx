@@ -16,8 +16,7 @@ export default function HomePage() {
   const { data: homeData, isLoading } = useQuery({
     queryKey: ['portal-home'],
     queryFn: () => api.get('/portal/home').then(r => r.data.data),
-    staleTime: 2 * 60 * 1000, // 2 min cache
-    gcTime: 5 * 60 * 1000,
+    // PERF FIX: Use global staleTime (5min) — removed local override that was shorter
   })
 
   const profile = homeData?.profile

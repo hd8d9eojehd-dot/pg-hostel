@@ -29,6 +29,9 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
+              // PERF FIX: prefetch=true (default) — Next.js prefetches all nav links in viewport
+              // This makes navigation feel instant
+              prefetch={true}
               className={cn(
                 'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[3.5rem] transition-colors',
                 active ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
