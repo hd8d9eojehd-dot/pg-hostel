@@ -1,4 +1,3 @@
-
 'use client'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -50,12 +49,24 @@ type FeeData = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  paid:     { label: 'Paid',     color: 'text-green-700',  bg: 'bg-green-100',  icon: '?' },
-  partial:  { label: 'Partial',  color: 'text-orange-700', bg: 'bg-orange-100', icon: '?' },
-  due:      { label: 'Due',      color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '?' },
-  overdue:  { label: 'Overdue',  color: 'text-red-700',    bg: 'bg-red-100',    icon: '?' },
-  current:  { label: 'Current',  color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '?' },
-  upcoming: { label: 'Upcoming', color: 'text-gray-500',   bg: 'bg-gray-100',   icon: '?' },
+  paid:     { label: 'Paid',     color: 'text-green-700',  bg: 'bg-green-100',  icon: 'OK' },
+  partial:  { label: 'Partial',  color: 'text-orange-700', bg: 'bg-orange-100', icon: '~' },
+  due:      { label: 'Due',      color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '...' },
+  overdue:  { label: 'Overdue',  color: 'text-red-700',    bg: 'bg-red-100',    icon: '!' },
+  current:  { label: 'Current',  color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '->' },
+  upcoming: { label: 'Upcoming', color: 'text-gray-500',   bg: 'bg-gray-100',   icon: 'o' },
+}
+
+function periodLabel(rentPackage: string, sem: number): string {
+  if (rentPackage === 'monthly') return `Month ${sem}`
+  if (rentPackage === 'annual') return `Year ${sem}`
+  return `Semester ${sem}`
+}
+
+function feeUnitLabel(rentPackage: string): string {
+  if (rentPackage === 'monthly') return 'month'
+  if (rentPackage === 'annual') return 'year'
+  return 'sem'
 }
 
 export default function FinancePage() {
@@ -76,33 +87,27 @@ export default function FinancePage() {
     queryFn: () => api.get('/portal/fee-structure').then(r => r.data.data),
   })
 
-  // Fetch UPI/Bank payment details from admin settings
   const { data: paymentDetails } = useQuery<Record<string, string> | null>({
     queryKey: ['payment-details'],
     queryFn: () => api.get('/portal/payment-details').then(r => r.data.data),
     staleTime: 5 * 60_000,
   })
 
-  // Live UTR payment status — polls every 10s
   const { data: myPayments } = useQuery({
     queryKey: ['my-payments'],
     queryFn: () => api.get('/portal/my-payments').then(r => r.data.data),
     refetchInterval: 10_000,
   })
 
-  // Show toast when a payment gets verified or rejected
   const pendingUtrs = (myPayments ?? []).filter((p: { utrVerified: boolean; utrRejected: boolean; notes?: string }) =>
     !p.utrVerified && !p.utrRejected && p.notes?.includes('PENDING_VERIFICATION')
   )
   const rejectedUtrs = (myPayments ?? []).filter((p: { utrRejected: boolean }) => p.utrRejected)
 
-  // Online payment via Cashfree — only available after admin approves payment request
   const initiateOnline = useMutation({
     mutationFn: async () => {
       if (!payingRow) throw new Error('No invoice selected')
       const returnUrl = `${window.location.origin}/finance/payment-status`
-
-      // If no invoiceId (current sem without invoice), create invoice first via payment-request
       if (!payingRow.invoiceId && payingRow.semNumber) {
         const createRes = await api.post('/portal/create-sem-invoice', {
           semNumber: payingRow.semNumber,
@@ -113,7 +118,6 @@ export default function FinancePage() {
         const res = await api.post('/payment/initiate', { invoiceId: newInvoiceId, returnUrl })
         return res.data.data
       }
-
       const res = await api.post('/payment/initiate', { invoiceId: payingRow.invoiceId, returnUrl })
       return res.data.data
     },
@@ -147,15 +151,11 @@ export default function FinancePage() {
     if (amountError) { toast({ title: amountError, variant: 'destructive' }); return }
     setSubmittingUpi(true)
     try {
-      const payload: Record<string, unknown> = {
-        amount: amt,
-        transactionRef: utrRef.trim(),
-        paymentMode: 'upi',
-      }
+      const payload: Record<string, unknown> = { amount: amt, transactionRef: utrRef.trim(), paymentMode: 'upi' }
       if (payingRow.invoiceId) payload['invoiceId'] = payingRow.invoiceId
       else if (payingRow.semNumber) payload['semNumber'] = payingRow.semNumber
       await api.post('/portal/payment-request', payload)
-      toast({ title: '? UTR submitted', description: 'Admin will verify within 24 hours' })
+      toast({ title: 'UTR submitted', description: 'Admin will verify within 24 hours' })
       qc.invalidateQueries({ queryKey: ['fee-structure'] })
       qc.invalidateQueries({ queryKey: ['my-payments'] })
       setRequestSubmitted(true)
@@ -201,7 +201,7 @@ export default function FinancePage() {
   return (
     <div>
       <TopBar title="Finance" />
-      <div className="max-w-lg mx-auto">{/* bottom padding handled by portal layout */}
+      <div className="max-w-lg mx-auto">
 
         {/* Summary banner */}
         <div className={`mx-4 mt-4 rounded-2xl p-4 ${summary.totalDue > 0 ? 'bg-gradient-to-r from-red-500 to-orange-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'}`}>
@@ -229,8 +229,8 @@ export default function FinancePage() {
         {summary.totalCourseFee > 0 && (
           <div className="mx-4 mt-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>Course completion</span>
-              <span>{student.currentSem}/{student.totalSems} sems · {Math.round((summary.totalPaid / summary.totalCourseFee) * 100)}% paid</span>
+              <span>Payment progress</span>
+              <span>{Math.round((summary.totalPaid / summary.totalCourseFee) * 100)}% paid</span>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
@@ -246,20 +246,20 @@ export default function FinancePage() {
           {(['structure', 'pay', 'history'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors capitalize ${tab === t ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
-              {t === 'structure' ? '?? Fee Plan' : t === 'pay' ? '?? Pay Now' : '?? History'}
+              {t === 'structure' ? 'Fee Plan' : t === 'pay' ? 'Pay Now' : 'History'}
             </button>
           ))}
         </div>
 
-        {/* UTR Status Banners — live updates */}
+        {/* UTR Status Banners */}
         {rejectedUtrs.length > 0 && (
-          <div className="mx-4 space-y-2">
+          <div className="mx-4 mt-3 space-y-2">
             {rejectedUtrs.map((p: { id: string; transactionRef: string; amount: number; utrRejectedReason?: string }) => (
               <div key={p.id} className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-3">
-                <span className="text-red-500 text-lg flex-shrink-0">?</span>
+                <span className="text-red-500 text-lg flex-shrink-0">X</span>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-red-800">Payment Rejected</p>
-                  <p className="text-xs text-red-600 mt-0.5">UTR: <code className="font-mono">{p.transactionRef}</code> · ?{Number(p.amount).toLocaleString('en-IN')}</p>
+                  <p className="text-xs text-red-600 mt-0.5">UTR: <code className="font-mono">{p.transactionRef}</code> - Rs.{Number(p.amount).toLocaleString('en-IN')}</p>
                   {p.utrRejectedReason && <p className="text-xs text-red-500 mt-0.5">Reason: {p.utrRejectedReason}</p>}
                   <p className="text-xs text-red-400 mt-1">Please contact admin or resubmit with correct UTR.</p>
                 </div>
@@ -268,9 +268,9 @@ export default function FinancePage() {
           </div>
         )}
         {pendingUtrs.length > 0 && (
-          <div className="mx-4">
+          <div className="mx-4 mt-3">
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-3">
-              <span className="text-orange-500 text-lg flex-shrink-0">?</span>
+              <span className="text-orange-500 text-lg flex-shrink-0">...</span>
               <div>
                 <p className="text-sm font-semibold text-orange-800">{pendingUtrs.length} Payment{pendingUtrs.length > 1 ? 's' : ''} Pending Verification</p>
                 <p className="text-xs text-orange-600 mt-0.5">Admin will verify within 24 hours. This page updates automatically.</p>
@@ -279,10 +279,9 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* -- FEE STRUCTURE TAB -- */}
+        {/* FEE STRUCTURE TAB */}
         {tab === 'structure' && (
           <div className="p-4 space-y-3">
-            {/* Course info */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -290,17 +289,16 @@ export default function FinancePage() {
                     <BookOpen className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{student.course ?? 'Course'} — {student.branch ?? ''}</p>
+                    <p className="font-semibold text-gray-900">{student.course ?? 'Course'} - {student.branch ?? ''}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Sem {student.currentSem} of {student.totalSems} · {student.rentPackage} · {formatCurrency(student.feePerSem)}/{student.rentPackage === 'monthly' ? 'month' : student.rentPackage === 'annual' ? 'year' : 'sem'}
+                      {student.rentPackage === 'semester' ? `Sem ${student.currentSem} of ${student.totalSems}` : student.rentPackage} - {formatCurrency(student.feePerSem)}/{feeUnitLabel(student.rentPackage)}
                     </p>
-                    {room && <p className="text-xs text-gray-400 mt-0.5">Room {room.roomNumber} · {room.pgName}</p>}
+                    {room && <p className="text-xs text-gray-400 mt-0.5">Room {room.roomNumber} - {room.pgName}</p>}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Semester rows */}
             <div className="space-y-2">
               {semesters.map(row => {
                 const cfg = STATUS_CONFIG[row.status] ?? STATUS_CONFIG['upcoming']
@@ -311,26 +309,22 @@ export default function FinancePage() {
                 return (
                   <Card key={row.sem} className={`overflow-hidden ${row.status === 'overdue' ? 'border-red-200' : row.status === 'current' || row.status === 'due' ? 'border-yellow-200' : ''}`}>
                     <CardContent className="p-0">
-                      {/* Main row */}
                       <div className="flex items-center gap-3 p-3">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${cfg.bg} ${cfg.color}`}>
                           {row.sem}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-gray-900">{student.rentPackage === 'monthly' ? `Month ${row.sem}` : student.rentPackage === 'annual' ? `Year ${row.sem}` : `Semester ${row.sem}`}</p>
+                            <p className="text-sm font-semibold text-gray-900">{periodLabel(student.rentPackage, row.sem)}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>
-                              {cfg.icon} {cfg.label}
+                              {cfg.label}
                             </span>
-                            {row.status === 'current' && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Current</span>
-                            )}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5">
                             <span className="text-xs text-gray-500">
                               Fee: {formatCurrency(row.sem === 1 ? row.feeAmount - d.summary.depositAmount : row.feeAmount)}
                               {row.sem === 1 && d.summary.depositAmount > 0 && (
-                                <span className="text-gray-400"> + ?{d.summary.depositAmount.toLocaleString('en-IN')} deposit</span>
+                                <span className="text-gray-400"> + Rs.{d.summary.depositAmount.toLocaleString('en-IN')} deposit</span>
                               )}
                             </span>
                             {row.paidAmount > 0 && <span className="text-xs text-green-600">Paid: {formatCurrency(row.paidAmount)}</span>}
@@ -343,7 +337,7 @@ export default function FinancePage() {
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {(canPay || row.canPayWithoutInvoice) && (
                             <Button size="sm" className="h-7 px-3 text-xs gap-1"
-                              onClick={() => openPay(row.invoice?.id ?? null, row.balance, `Semester ${row.sem} Fee`, row.sem)}>
+                              onClick={() => openPay(row.invoice?.id ?? null, row.balance, periodLabel(student.rentPackage, row.sem) + ' Fee', row.sem)}>
                               <CreditCard className="w-3 h-3" /> Pay
                             </Button>
                           )}
@@ -356,7 +350,6 @@ export default function FinancePage() {
                         </div>
                       </div>
 
-                      {/* Expanded payment history */}
                       {isExpanded && row.invoice && (
                         <div className="border-t bg-gray-50 px-3 py-2 space-y-1.5">
                           {row.invoice.lateFee > 0 && (
@@ -372,7 +365,7 @@ export default function FinancePage() {
                               <div key={p.id} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
                                   <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                  <span className="text-gray-600">{formatDate(p.paidDate)} · {p.paymentMode.replace('_', ' ')}</span>
+                                  <span className="text-gray-600">{formatDate(p.paidDate)} - {p.paymentMode.replace('_', ' ')}</span>
                                   {p.transactionRef && <span className="text-gray-400 font-mono">UTR: {p.transactionRef}</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -393,7 +386,6 @@ export default function FinancePage() {
               })}
             </div>
 
-            {/* Other charges */}
             {otherInvoices.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">Other Charges</p>
@@ -409,7 +401,7 @@ export default function FinancePage() {
                               <p className="text-sm font-medium capitalize">{inv.description ?? inv.type}</p>
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">{inv.invoiceNumber} · Due {formatDate(inv.dueDate)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{inv.invoiceNumber} - Due {formatDate(inv.dueDate)}</p>
                             {inv.balance > 0 && <p className="text-xs text-red-600 font-medium mt-0.5">Balance: {formatCurrency(inv.balance)}</p>}
                           </div>
                           {canPay && (
@@ -434,7 +426,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* -- PAY NOW TAB -- */}
+        {/* PAY NOW TAB */}
         {tab === 'pay' && (
           <div className="p-4 space-y-3">
             {payableSems.length === 0 && pendingOther.length === 0 ? (
@@ -451,11 +443,11 @@ export default function FinancePage() {
                 {[...payableSems.map(s => ({
                   invoiceId: s.invoice?.id ?? null,
                   semNumber: s.sem,
-                  label: student.rentPackage === 'monthly' ? `Month ${s.sem} Fee` : student.rentPackage === 'annual' ? `Year ${s.sem} Fee` : `Semester ${s.sem} Fee`,
+                  label: periodLabel(student.rentPackage, s.sem) + ' Fee',
                   balance: s.balance,
                   status: s.status,
                   dueDate: s.invoice?.dueDate ?? new Date().toISOString(),
-                  invoiceNumber: s.invoice?.invoiceNumber ?? `SEM-${s.sem}`,
+                  invoiceNumber: s.invoice?.invoiceNumber ?? `${student.rentPackage.toUpperCase()}-${s.sem}`,
                 })), ...pendingOther.map(i => ({
                   invoiceId: i.id,
                   semNumber: undefined,
@@ -475,7 +467,7 @@ export default function FinancePage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold">{item.label}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{item.invoiceNumber} · Due {formatDate(item.dueDate)}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{item.invoiceNumber} - Due {formatDate(item.dueDate)}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-red-600">{formatCurrency(item.balance)}</p>
@@ -509,7 +501,6 @@ export default function FinancePage() {
                         </div>
                       ) : (
                         <>
-                          {/* Amount with validation */}
                           <div className="space-y-1.5">
                             <Label className="text-xs">Amount to Pay (Rs.) <span className="text-destructive">*</span></Label>
                             <Input type="number" value={customAmount}
@@ -521,7 +512,7 @@ export default function FinancePage() {
                                   && d.student.totalSems > 0
                                   && payingRow.semNumber >= d.student.totalSems
                                 if (amt > payingRow.balance + 0.01 && isLastSem) {
-                                  setAmountError(`Last semester - please pay exact amount Rs.${payingRow.balance.toLocaleString('en-IN')}`)
+                                  setAmountError(`Last period - please pay exact amount Rs.${payingRow.balance.toLocaleString('en-IN')}`)
                                 } else if (amt <= 0) {
                                   setAmountError('Amount must be greater than 0')
                                 } else {
@@ -533,37 +524,33 @@ export default function FinancePage() {
                             {amountError && <p className="text-xs text-red-500">{amountError}</p>}
                             {!amountError && parseFloat(customAmount) > 0 && parseFloat(customAmount) < payingRow.balance - 0.01 && (
                               <p className="text-xs text-yellow-600">
-                                Partial payment - Rs.{(payingRow.balance - parseFloat(customAmount)).toLocaleString('en-IN')} will remain due. Admin must approve partial payments.
+                                Partial payment - Rs.{(payingRow.balance - parseFloat(customAmount)).toLocaleString('en-IN')} will remain due.
                               </p>
                             )}
                             {!amountError && parseFloat(customAmount) > payingRow.balance + 0.01 && (() => {
-                              const isLastSem = payingRow.semNumber !== undefined
-                                && d.student.totalSems > 0
-                                && payingRow.semNumber >= d.student.totalSems
+                              const isLastSem = payingRow.semNumber !== undefined && d.student.totalSems > 0 && payingRow.semNumber >= d.student.totalSems
                               const excess = parseFloat(customAmount) - payingRow.balance
                               return !isLastSem ? (
                                 <p className="text-xs text-blue-600">
-                                  Excess Rs.{excess.toLocaleString('en-IN')} will be credited to next semester.
+                                  Excess Rs.{excess.toLocaleString('en-IN')} will be credited to next period.
                                 </p>
                               ) : null
                             })()}
                           </div>
 
-                          {/* Payment mode selector */}
                           <div className="grid grid-cols-2 gap-2">
                             <button onClick={() => setPayMode('upi')}
                               className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'upi' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                              <p className="text-xs font-semibold">?? UPI / Bank Transfer</p>
+                              <p className="text-xs font-semibold">UPI / Bank Transfer</p>
                               <p className="text-[10px] text-gray-400 mt-0.5">Submit UTR for verification</p>
                             </button>
                             <button onClick={() => setPayMode('online')}
                               className={`p-3 rounded-xl border-2 text-center transition-colors ${payMode === 'online' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                              <p className="text-xs font-semibold">?? Online (Cashfree)</p>
+                              <p className="text-xs font-semibold">Online (Cashfree)</p>
                               <p className="text-[10px] text-gray-400 mt-0.5">Card / UPI / Net Banking</p>
                             </button>
                           </div>
 
-                          {/* UPI details from admin settings */}
                           {payMode === 'upi' && (
                             <div className="space-y-3">
                               {paymentDetails && (paymentDetails.upiId || paymentDetails.upiQrUrl || paymentDetails.bankAccountNumber) ? (
@@ -600,7 +587,7 @@ export default function FinancePage() {
                                       )}
                                     </>
                                   )}
-                                  <p className="text-[10px] text-blue-600">Transfer ?{formatCurrency(parseFloat(customAmount) || payingRow.balance)} and enter UTR below</p>
+                                  <p className="text-[10px] text-blue-600">Transfer {formatCurrency(parseFloat(customAmount) || payingRow.balance)} and enter UTR below</p>
                                 </div>
                               ) : (
                                 <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
@@ -639,7 +626,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* -- HISTORY TAB -- */}
+        {/* HISTORY TAB */}
         {tab === 'history' && (
           <div className="p-4 space-y-3">
             {semesters.every(s => s.invoice?.payments.length === 0 || !s.invoice) && paidOther.length === 0 ? (
@@ -653,7 +640,7 @@ export default function FinancePage() {
               <>
                 {semesters.filter(s => (s.invoice?.payments.length ?? 0) > 0).map(row => (
                   <div key={row.sem}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1 mb-1.5">Semester {row.sem}</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1 mb-1.5">{periodLabel(student.rentPackage, row.sem)}</p>
                     {row.invoice!.payments.map(p => (
                       <Card key={p.id} className="mb-2">
                         <CardContent className="p-3">
@@ -664,7 +651,7 @@ export default function FinancePage() {
                                 <p className="text-sm font-medium">{formatDate(p.paidDate)}</p>
                                 <p className="text-xs text-gray-400 mt-0.5 capitalize">
                                   {p.paymentMode.replace('_', ' ')}
-                                  {p.transactionRef ? ` · UTR: ${p.transactionRef}` : ''}
+                                  {p.transactionRef ? ` - UTR: ${p.transactionRef}` : ''}
                                 </p>
                               </div>
                             </div>
@@ -694,7 +681,7 @@ export default function FinancePage() {
                                 <p className="text-sm font-medium">{formatDate(p.paidDate)}</p>
                                 <p className="text-xs text-gray-400 mt-0.5 capitalize">
                                   {p.paymentMode.replace('_', ' ')}
-                                  {p.transactionRef ? ` · UTR: ${p.transactionRef}` : ''}
+                                  {p.transactionRef ? ` - UTR: ${p.transactionRef}` : ''}
                                 </p>
                               </div>
                             </div>
