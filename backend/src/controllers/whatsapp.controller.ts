@@ -1,8 +1,24 @@
 import { Request, Response, NextFunction } from 'express'
 import { sendWhatsAppMessage, sendBulkWhatsApp } from '../services/whatsapp.service'
-import { isWhatsAppReady, getQrCode, getQrDataUrl, isQrExpired, isWhatsAppInitializing } from '../config/whatsapp'
+import { isWhatsAppReady, getQrCode, isWhatsAppInitializing } from '../config/whatsapp'
 import { prisma } from '../config/prisma'
 import { getPaginationParams, getPaginationMeta, getSkip } from '../utils/pagination'
+
+// Get QR from DB (persistent across page refreshes)
+async function getStoredQr(): Promise<{ qrDataUrl: string | null; savedAt: string | null }> {
+  try {
+    const branch = await prisma.branch.findFirst({ select: { id: true } })
+    if (!branch) return { qrDataUrl: null, savedAt: null }
+    const settings = await prisma.settings.findUnique({ where: { branchId: branch.id }, select: { staffPermissions: true } })
+    const perms = (settings?.staffPermissions as Record<string, unknown>) ?? {}
+    return {
+      qrDataUrl: (perms['whatsappQr'] as string | null) ?? null,
+      savedAt: (perms['whatsappQrSavedAt'] as string | null) ?? null,
+    }
+  } catch {
+    return { qrDataUrl: null, savedAt: null }
+  }
+}
 
 export async function sendSingle(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -57,16 +73,24 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 }
 
 export async function getWhatsAppStatus(_req: Request, res: Response): Promise<void> {
-  const qrDataUrl = getQrDataUrl()
-  const qrString = getQrCode()
+  const ready = isWhatsAppReady()
+  // If connected, no need to show QR
+  if (ready) {
+    res.json({ success: true, data: { ready: true, initializing: false, qrAvailable: false, qrDataUrl: null, savedAt: null } })
+    return
+  }
+  // Read QR from DB — persistent, instant, no Puppeteer wait
+  const { qrDataUrl, savedAt } = await getStoredQr()
   res.json({
     success: true,
     data: {
-      ready: isWhatsAppReady(),
+      ready: false,
       initializing: isWhatsAppInitializing(),
-      qrAvailable: !!qrString,
-      qrExpired: isQrExpired(),
-      qrDataUrl: qrDataUrl ?? null, // stable PNG — only changes when manually refreshed
+      qrAvailable: !!qrDataUrl,
+      qrDataUrl,
+      savedAt,
+      // Also check if runtime QR is available (just generated, not yet saved)
+      runtimeQrAvailable: !!getQrCode(),
     },
   })
 }

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -10,21 +10,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
-import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, LogOut, AlertTriangle, CheckCircle2, Upload, QrCode } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 
 type WaStatus = {
   ready: boolean
   initializing: boolean
   qrAvailable: boolean
-  qrExpired: boolean
   qrDataUrl: string | null
+  savedAt: string | null
+  runtimeQrAvailable: boolean
 }
 
 export default function WhatsAppPage() {
   const { toast } = useToast()
   const { user } = useAuthStore()
   const qc = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [mobile, setMobile] = useState('')
   const [message, setMessage] = useState('')
   const [bulkMessage, setBulkMessage] = useState('')
@@ -37,31 +39,18 @@ export default function WhatsAppPage() {
   const [templates, setTemplates] = useState<Record<string, string>>({})
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
 
-  // Poll status — fast when waiting for QR, slow when connected
+  // Poll status — reads QR from DB (instant, no Puppeteer wait)
   const { data: status, refetch: refetchStatus } = useQuery<WaStatus>({
     queryKey: ['wa-status'],
     queryFn: () => api.get('/whatsapp/status').then(r => r.data.data),
     refetchInterval: (query) => {
       const d = query.state.data as WaStatus | undefined
-      if (d?.ready) return 30000       // connected — slow poll
-      if (d?.qrAvailable) return 4000  // QR shown — poll to detect scan
-      return 2000                       // waiting for QR — fast poll
+      if (d?.ready) return 30000      // connected — slow poll
+      if (d?.qrAvailable) return 8000 // QR shown — check for scan
+      return 5000                      // waiting — check for QR
     },
     staleTime: 0,
   })
-
-  // Auto-trigger reconnect on first load if not connected and not initializing
-  // This ensures QR appears automatically without clicking any button
-  const [autoStarted, setAutoStarted] = useState(false)
-  useEffect(() => {
-    if (!autoStarted && status !== undefined && !status.ready && !status.initializing && !status.qrAvailable) {
-      setAutoStarted(true)
-      api.post('/whatsapp/reconnect').catch(() => {})
-      // Poll aggressively after auto-start
-      const polls = [2000, 4000, 6000, 8000, 12000, 18000, 25000]
-      polls.forEach(ms => setTimeout(() => refetchStatus(), ms))
-    }
-  }, [status, autoStarted, refetchStatus])
 
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ['wa-logs', page, logsStatusFilter, logsStartDate, logsEndDate],
@@ -115,127 +104,144 @@ export default function WhatsAppPage() {
     mutationFn: () => api.post('/whatsapp/logout'),
     onSuccess: () => {
       toast({ title: 'WhatsApp disconnected' })
-      setAutoStarted(false) // allow auto-start again after logout
       qc.invalidateQueries({ queryKey: ['wa-status'] })
       setTimeout(() => refetchStatus(), 500)
     },
     onError: (e: unknown) => toast({ title: 'Logout failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
   })
 
-  // Manual QR refresh
-  const refreshQr = useMutation({
+  // Reconnect — triggers Puppeteer QR generation (if Chrome available)
+  const reconnect = useMutation({
     mutationFn: () => api.post('/whatsapp/reconnect'),
     onSuccess: () => {
-      toast({ title: 'Generating new QR...' })
-      const polls = [2000, 4000, 6000, 8000, 12000]
+      toast({ title: 'Reconnecting...', description: 'QR will update in a few seconds if Chrome is available.' })
+      const polls = [3000, 6000, 10000, 15000, 20000, 30000]
       polls.forEach(ms => setTimeout(() => refetchStatus(), ms))
     },
-    onError: () => toast({ title: 'Failed to refresh QR', variant: 'destructive' }),
+    onError: () => toast({ title: 'Reconnect failed', variant: 'destructive' }),
   })
+
+  // Upload QR image from file — converts to base64 and saves to DB
+  const uploadQr = async (file: File) => {
+    if (file.size > 2 * 1024 * 1024) { toast({ title: 'Image too large (max 2MB)', variant: 'destructive' }); return }
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string
+      try {
+        await api.post('/whatsapp/save-qr', { qrDataUrl: dataUrl })
+        toast({ title: 'QR saved', description: 'QR image saved to database. Scan it to connect.' })
+        qc.invalidateQueries({ queryKey: ['wa-status'] })
+        refetchStatus()
+      } catch {
+        toast({ title: 'Failed to save QR', variant: 'destructive' })
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   const logsList = logs?.data ?? []
   const pagination = logs?.pagination
   const statusBadge = (s: string) => ({ sent: 'bg-green-100 text-green-800', delivered: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800', queued: 'bg-yellow-100 text-yellow-800' }[s] ?? 'bg-gray-100 text-gray-600')
   const DEFAULT_TEMPLATE_KEYS = ['admission', 'payment_reminder', 'payment_received', 'fee_due', 'notice']
 
-  const isWaiting = !status?.ready && !status?.qrAvailable
-
   return (
     <div>
       <Header title="WhatsApp" />
       <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
 
-        {/* ── MAIN CONNECTION CARD ── */}
+        {/* ── CONNECTION CARD ── */}
         {status?.ready ? (
-          /* ── CONNECTED STATE ── */
+          /* CONNECTED */
           <Card className="border-green-200 bg-green-50">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-green-800 text-base">WhatsApp Connected</p>
-                    <p className="text-sm text-green-600 mt-0.5">All notifications will be delivered automatically</p>
-                  </div>
+            <CardContent className="p-5 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-green-600" />
                 </div>
-                <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
-                  onClick={() => { if (confirm('Force disconnect WhatsApp? You will need to scan QR again.')) forceLogout.mutate() }}
-                  disabled={forceLogout.isPending}>
-                  {forceLogout.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-                  Force Logout
-                </Button>
+                <div>
+                  <p className="font-bold text-green-800 text-base">WhatsApp Connected</p>
+                  <p className="text-sm text-green-600 mt-0.5">All notifications will be delivered automatically</p>
+                </div>
               </div>
+              <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => { if (confirm('Force disconnect WhatsApp? You will need to scan QR again.')) forceLogout.mutate() }}
+                disabled={forceLogout.isPending}>
+                {forceLogout.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                Force Logout
+              </Button>
             </CardContent>
           </Card>
         ) : (
-          /* ── NOT CONNECTED — SHOW QR PERMANENTLY ── */
+          /* NOT CONNECTED — SHOW QR PERMANENTLY */
           <Card className="border-orange-200">
             <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center">
                     <WifiOff className="w-6 h-6 text-orange-500" />
                   </div>
                   <div>
                     <p className="font-bold text-gray-800 text-base">WhatsApp Not Connected</p>
-                    <p className="text-sm text-gray-500 mt-0.5">Scan the QR code below to connect</p>
+                    <p className="text-sm text-gray-500 mt-0.5">Scan the QR code below with your phone</p>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500" onClick={() => refetchStatus()}>
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500" onClick={() => refetchStatus()}>
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-blue-600 border-blue-200"
+                    onClick={() => reconnect.mutate()} disabled={reconnect.isPending || status?.initializing}>
+                    {(reconnect.isPending || status?.initializing)
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting...</>
+                      : <><RefreshCw className="w-3.5 h-3.5" /> Generate New QR</>}
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-6">
-                {/* QR Code area */}
+              <div className="flex flex-col sm:flex-row items-start gap-6">
+                {/* QR Code — permanent from DB */}
                 <div className="flex-shrink-0 flex flex-col items-center gap-3">
-                  {isWaiting ? (
-                    /* Generating QR */
-                    <div className="w-56 h-56 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3">
-                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium text-gray-600">Generating QR Code...</p>
-                        <p className="text-xs text-gray-400 mt-1">Takes 5-15 seconds</p>
-                      </div>
-                    </div>
-                  ) : status?.qrDataUrl ? (
-                    /* QR ready — show it */
-                    <div className="relative">
+                  {status?.qrDataUrl ? (
+                    <>
                       <img
                         src={status.qrDataUrl}
                         alt="WhatsApp QR Code"
-                        className={`w-56 h-56 rounded-2xl border-2 border-gray-200 shadow-sm ${status.qrExpired ? 'opacity-25 blur-sm' : ''}`}
+                        className="w-56 h-56 rounded-2xl border-2 border-gray-200 shadow-sm"
                       />
-                      {status.qrExpired && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-white/80">
-                          <AlertTriangle className="w-8 h-8 text-orange-500" />
-                          <p className="text-sm font-bold text-orange-700">QR Expired</p>
-                          <Button size="sm" className="gap-1.5 mt-1"
-                            onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
-                            {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                            Get New QR
-                          </Button>
-                        </div>
+                      {status.savedAt && (
+                        <p className="text-[10px] text-gray-400 text-center">
+                          Generated: {new Date(status.savedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    /* QR available but no data URL yet */
                     <div className="w-56 h-56 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3">
-                      <QrCode className="w-10 h-10 text-gray-300" />
-                      <p className="text-xs text-gray-400">Loading QR...</p>
+                      {status?.initializing ? (
+                        <>
+                          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                          <p className="text-sm font-medium text-gray-600 text-center px-4">Generating QR...</p>
+                        </>
+                      ) : (
+                        <>
+                          <QrCode className="w-10 h-10 text-gray-300" />
+                          <p className="text-xs text-gray-400 text-center px-4">No QR available.<br />Click "Generate New QR" or upload below.</p>
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {/* Manual refresh button — only when QR is showing and not expired */}
-                  {status?.qrAvailable && !status.qrExpired && (
-                    <Button variant="outline" size="sm" className="gap-1.5 text-gray-500 w-full"
-                      onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
-                      {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      Refresh QR
+                  {/* Upload QR from file */}
+                  <div className="w-full">
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadQr(f) }} />
+                    <Button variant="outline" size="sm" className="w-full gap-1.5 text-gray-600"
+                      onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="w-3.5 h-3.5" /> Upload QR Image
                     </Button>
-                  )}
+                    <p className="text-[10px] text-gray-400 text-center mt-1">
+                      Screenshot the QR from your phone/terminal and upload
+                    </p>
+                  </div>
                 </div>
 
                 {/* Instructions */}
@@ -257,12 +263,20 @@ export default function WhatsAppPage() {
                   </div>
 
                   <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-1.5 text-xs text-blue-700">
-                    <p className="font-semibold">Important:</p>
-                    <p>• QR stays visible until you scan it</p>
-                    <p>• Once connected, WhatsApp stays logged in permanently</p>
+                    <p className="font-semibold">QR is saved permanently in database.</p>
+                    <p>• The same QR shows every time you open this page</p>
+                    <p>• Once scanned, WhatsApp stays connected permanently</p>
                     <p>• Only "Force Logout" will disconnect it</p>
-                    <p>• If QR expires before scanning, click "Refresh QR"</p>
+                    <p>• If QR expired, click "Generate New QR" or upload a fresh screenshot</p>
                   </div>
+
+                  {!status?.qrDataUrl && !status?.initializing && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800">
+                      <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> No QR found</p>
+                      <p className="mt-1">Click <strong>Generate New QR</strong> to start WhatsApp (requires Chrome on server).</p>
+                      <p className="mt-1">Or <strong>upload a QR screenshot</strong> from the WhatsApp terminal output.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -280,7 +294,6 @@ export default function WhatsAppPage() {
             </TabsList>
           </div>
 
-          {/* Single */}
           <TabsContent value="single" className="mt-4">
             <Card>
               <CardHeader><CardTitle className="text-base">Send to Single Number</CardTitle></CardHeader>
@@ -310,7 +323,6 @@ export default function WhatsAppPage() {
             </Card>
           </TabsContent>
 
-          {/* Bulk */}
           <TabsContent value="bulk" className="mt-4">
             <Card>
               <CardHeader>
@@ -359,7 +371,6 @@ export default function WhatsAppPage() {
             </Card>
           </TabsContent>
 
-          {/* Templates */}
           <TabsContent value="templates" className="mt-4">
             <Card>
               <CardHeader>
@@ -382,7 +393,6 @@ export default function WhatsAppPage() {
             </Card>
           </TabsContent>
 
-          {/* Logs */}
           <TabsContent value="logs" className="mt-4">
             <Card className="mb-4">
               <CardContent className="p-4">
