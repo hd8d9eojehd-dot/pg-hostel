@@ -22,29 +22,18 @@ export default function WhatsAppPage() {
   const [bulkMessage, setBulkMessage] = useState('')
   const [page, setPage] = useState(1)
 
-  // Component that fetches QR image from backend (avoids client-side canvas issues)
+  // Component that renders QR from status data — no separate API call needed
   function WhatsAppQrImage() {
-    const { data: qrData, isLoading, isError } = useQuery({
-      queryKey: ['wa-qr-image'],
-      queryFn: () => api.get('/whatsapp/qr-image').then(r => r.data.data),
-      refetchInterval: 3000, // poll every 3s — QR expires at 20s, need to catch it quickly
-      staleTime: 0,
-      retry: false, // don't retry on 404 — just wait for next poll
-    })
-    if (isLoading) return (
+    if (status?.qrDataUrl) {
+      return <img src={status.qrDataUrl} alt="WhatsApp QR Code" className="rounded-xl border shadow-sm w-[min(220px,80vw)] aspect-square" />
+    }
+    return (
       <div className="w-[min(220px,80vw)] aspect-square bg-gray-50 rounded-xl flex flex-col items-center justify-center gap-2">
         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
         <p className="text-xs text-gray-400">Generating QR...</p>
-      </div>
-    )
-    if (isError || !qrData?.dataUrl) return (
-      <div className="w-[min(220px,80vw)] aspect-square bg-gray-50 rounded-xl flex flex-col items-center justify-center gap-2">
-        <QrCode className="w-8 h-8 text-gray-300" />
-        <p className="text-xs text-gray-400">Waiting for QR...</p>
         <p className="text-[10px] text-gray-300">Auto-refreshing every 3s</p>
       </div>
     )
-    return <img src={qrData.dataUrl} alt="WhatsApp QR Code" className="rounded-xl border shadow-sm w-[min(220px,80vw)] aspect-square" />
   }
 
   // Bulk filters
@@ -64,10 +53,11 @@ export default function WhatsAppPage() {
     queryKey: ['wa-status'],
     queryFn: () => api.get('/whatsapp/status').then(r => r.data.data),
     refetchInterval: (query) => {
-      // Poll every 5s while waiting for QR scan, 30s once connected
       const data = query.state.data as { ready?: boolean } | undefined
-      return data?.ready ? 30000 : 5000
+      // Poll every 3s when not connected (to catch QR quickly), 30s when connected
+      return data?.ready ? 30000 : 3000
     },
+    staleTime: 0,
   })
 
   const { data: logs, isLoading: logsLoading } = useQuery({
@@ -243,7 +233,7 @@ export default function WhatsAppPage() {
                   <p>1. Open WhatsApp on your phone</p>
                   <p>2. Tap <strong>Menu → Linked Devices → Link a Device</strong></p>
                   <p>3. Point your camera at the QR code above</p>
-                  <p className="text-orange-600 font-medium">QR refreshes every 18 seconds automatically</p>
+                  <p className="text-orange-600 font-medium">QR refreshes every 20 seconds automatically</p>
                 </div>
               </div>
             )}

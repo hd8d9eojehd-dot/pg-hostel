@@ -23,7 +23,7 @@ const EnvSchema = z.object({
   WHATSAPP_SESSION_PATH: z.string().default('./whatsapp-session'),
   WHATSAPP_HEADLESS: z.string().default('true').transform(v => v === 'true'),
   TZ: z.string().default('Asia/Kolkata'),
-  PG_NAME: z.string().default('Sunrise PG'),
+  PG_NAME: z.string().default('South Indian PG'),
   RECEIPT_BASE_URL: z.string().default('http://localhost:4000/api/v1/finance/receipts'),
   OTP_LENGTH: z.string().default('6').transform(Number),
   OTP_EXPIRY_SECONDS: z.string().default('300').transform(Number),

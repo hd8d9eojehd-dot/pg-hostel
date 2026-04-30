@@ -59,12 +59,25 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 
 export async function getWhatsAppStatus(_req: Request, res: Response): Promise<void> {
   const qr = getQrCode()
+  // Also generate QR data URL inline so frontend doesn't need a separate /qr-image call
+  let qrDataUrl: string | null = null
+  if (qr) {
+    try {
+      const QRCode = await import('qrcode')
+      qrDataUrl = await QRCode.toDataURL(qr, {
+        width: 280, margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+    } catch { /* non-fatal */ }
+  }
   res.json({
     success: true,
     data: {
       ready: isWhatsAppReady(),
       qrAvailable: !!qr,
-      qr: qr ?? null,          // raw QR string — frontend renders it
+      qr: qr ?? null,
+      qrDataUrl: qrDataUrl ?? null, // inline data URL — use directly in <img>
     },
   })
 }

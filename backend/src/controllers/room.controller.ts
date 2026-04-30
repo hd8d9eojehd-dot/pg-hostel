@@ -29,11 +29,24 @@ export async function updateFloor(req: Request, res: Response, next: NextFunctio
 export async function deleteFloor(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params as { id: string }
-    // Check if floor has rooms
-    const rooms = await prisma.room.findMany({ where: { floorId: id } })
-    if (rooms.length > 0) throw new ApiError(400, `Cannot delete floor with ${rooms.length} room(s). Remove rooms first.`)
+    // Check for active students in any room on this floor
+    const activeStudents = await prisma.student.count({
+      where: { room: { floorId: id }, status: 'active' },
+    })
+    if (activeStudents > 0) throw new ApiError(400, `Cannot delete floor with ${activeStudents} active student(s). Vacate or shift them first.`)
+    // Get all rooms on this floor
+    const rooms = await prisma.room.findMany({ where: { floorId: id }, select: { id: true } })
+    const roomIds = rooms.map(r => r.id)
+    // Delete in correct order
+    if (roomIds.length > 0) {
+      await prisma.roomHistory.deleteMany({ where: { OR: [{ toRoomId: { in: roomIds } }, { fromRoomId: { in: roomIds } }] } }).catch(() => {})
+      await prisma.bed.deleteMany({ where: { roomId: { in: roomIds } } })
+      await prisma.room.deleteMany({ where: { id: { in: roomIds } } })
+    }
     await prisma.floor.delete({ where: { id } })
-    res.json({ success: true, message: 'Floor deleted' })
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await invalidateCache('cache:rooms:*').catch(() => {})
+    res.json({ success: true, message: 'Floor and all rooms deleted' })
   } catch (err) { next(err) }
 }
 
@@ -42,10 +55,14 @@ export async function deleteRoom(req: Request, res: Response, next: NextFunction
     const { id } = req.params as { id: string }
     const room = await prisma.room.findUnique({ where: { id }, include: { students: { where: { status: 'active' } } } })
     if (!room) throw new ApiError(404, 'Room not found')
-    if (room.students.length > 0) throw new ApiError(400, 'Cannot delete room with active students')
-    // Delete beds first
+    if (room.students.length > 0) throw new ApiError(400, 'Cannot delete room with active students. Vacate or shift students first.')
+    // Delete in correct order to avoid FK constraint errors
+    await prisma.roomHistory.deleteMany({ where: { OR: [{ toRoomId: id }, { fromRoomId: id }] } }).catch(() => {})
     await prisma.bed.deleteMany({ where: { roomId: id } })
     await prisma.room.delete({ where: { id } })
+    // Invalidate room caches
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await invalidateCache('cache:rooms:*').catch(() => {})
     res.json({ success: true, message: 'Room deleted' })
   } catch (err) { next(err) }
 }

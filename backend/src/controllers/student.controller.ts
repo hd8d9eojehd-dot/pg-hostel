@@ -477,8 +477,13 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       })
       if (notifyStudent) {
         const { sendWhatsAppMessage } = await import('../services/whatsapp.service')
-        const { env: envConfig } = await import('../config/env')
-        const msg = `📚 *Semester Updated — ${envConfig.PG_NAME}*\n\nDear *${notifyStudent.name}*,\n\nYour current semester has been updated to *Semester ${newSem}*.\n\nA new fee invoice has been generated and is now *due*. Please pay via the student portal.\n\n🔗 ${envConfig.STUDENT_PORTAL_URL}/finance\n\n_${envConfig.PG_NAME}_`
+        // Get PG name from DB branch
+        const branchData = notifyStudent.room?.branchId
+          ? await prisma.branch.findUnique({ where: { id: notifyStudent.room.branchId }, select: { name: true, contactPrimary: true } })
+          : await prisma.branch.findFirst({ select: { name: true, contactPrimary: true } })
+        const pgName = branchData?.name ?? env.PG_NAME
+        const pgContact = branchData?.contactPrimary ?? ''
+        const msg = `📚 *Semester Updated — ${pgName}*\n\nDear *${notifyStudent.name}* (${notifyStudent.studentId}),\n\nYour current semester has been updated to *Semester ${newSem}*.\n\nA new fee invoice has been generated and is now *due*. Please pay via UPI/Bank Transfer or contact admin.\n\n${pgContact ? `📞 ${pgContact}\n` : ''}_${pgName}_`
         sendWhatsAppMessage({ mobile: notifyStudent.mobile, message: msg, studentId: notifyStudent.id, templateName: 'SEM_ADVANCE' }).catch(() => {})
         if (notifyStudent.parentMobile && notifyStudent.parentMobile !== notifyStudent.mobile) {
           sendWhatsAppMessage({ mobile: notifyStudent.parentMobile, message: msg, studentId: notifyStudent.id, templateName: 'SEM_ADVANCE_PARENT' }).catch(() => {})
@@ -513,7 +518,7 @@ export async function extendStay(req: Request, res: Response, next: NextFunction
 export async function vacateStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await studentService.vacateStudent(req.params['id']!, req.body as VacateStudentInput, req.user!.id)
-    // PERF FIX: Invalidate all student and room caches after vacate
+    // Invalidate all caches — student data is fully deleted
     const { invalidateCache } = await import('../middleware/cache.middleware')
     await Promise.all([
       invalidateCache(`cache:students:${req.params['id']!}`),
@@ -521,8 +526,9 @@ export async function vacateStudent(req: Request, res: Response, next: NextFunct
       invalidateCache('cache:students:stats'),
       invalidateCache('cache:rooms:*'),
       invalidateCache('cache:dashboard:*'),
+      invalidateCache(`cache:portal:*`),
     ]).catch(() => {})
-    res.json({ success: true, message: 'Student vacated successfully' })
+    res.json({ success: true, message: 'Student vacated and all data deleted successfully' })
   } catch (err) {
     next(err)
   }

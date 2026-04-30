@@ -13,7 +13,6 @@ import { outpassRouter } from './outpass.routes'
 import { documentRouter } from './document.routes'
 import { whatsappRouter } from './whatsapp.routes'
 import { feedbackRouter } from './feedback.routes'
-import { reportRouter } from './report.routes'
 import { settingsRouter } from './settings.routes'
 import { portalRouter } from './portal.routes'
 import { cashfreeWebhook } from '../controllers/payment.controller'
@@ -27,14 +26,8 @@ export const router = Router()
 
 // ─── Public routes (no auth) ─────────────────────────────
 router.use('/auth', authRouter)
-
-// Cashfree webhook — public, verified by HMAC signature inside handler
 router.post('/payment/webhook', cashfreeWebhook)
-
-// Public QR verification — accessible via Google scan without login
 router.get('/students/verify-qr', verifyQr)
-
-// Public receipt download — no auth needed for student portal
 router.get('/finance/receipts/:receiptNumber', downloadReceipt)
 
 // ─── Protected routes (auth required) ────────────────────
@@ -53,7 +46,6 @@ router.use('/outpass', outpassRouter)
 router.use('/documents', documentRouter)
 router.use('/whatsapp', whatsappRouter)
 router.use('/feedback', feedbackRouter)
-router.use('/reports', reportRouter)
 router.use('/settings', settingsRouter)
 router.use('/portal', portalRouter)
 router.use('/renewals', renewalRouter)

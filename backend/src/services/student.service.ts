@@ -625,43 +625,42 @@ export async function vacateStudent(id: string, input: VacateStudentInput, admin
         data: { status: occupied === 0 ? 'available' : 'partial' },
       })
     }
-    // Mark as vacated (keep record for history/re-admission)
-    await tx.student.update({
-      where: { id },
-      data: {
-        status: 'vacated',
-        roomId: null,
-        bedId: null,
-        depositRefunded: (input.depositRefundAmount ?? 0) > 0,
-        depositRefundDate: (input.depositRefundAmount ?? 0) > 0 ? new Date(input.vacateDate) : null,
-        updatedAt: new Date(),
-      },
-    })
-    await tx.renewalExit.create({
-      data: {
-        studentId: id,
-        type: 'exit',
-        effectiveDate: new Date(input.vacateDate),
-        depositRefundAmount: input.depositRefundAmount ?? 0,
-        damageAmount: input.damageAmount ?? 0,
-        inspectionNotes: input.inspectionNotes,
-        status: 'completed',
-        processedBy: adminId,
-        processedAt: new Date(),
-      },
-    })
+
+    // Delete ALL student data — vacate is permanent, no re-admission
+    await tx.whatsappLog.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.feedback.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.outpass.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.complaintComment.deleteMany({ where: { complaint: { studentId: id } } }).catch(() => {})
+    await tx.complaint.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.document.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.extraCharge.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.roomHistory.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.renewalExit.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.payment.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.invoice.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.parent.deleteMany({ where: { studentId: id } }).catch(() => {})
+    await tx.activityLog.deleteMany({ where: { entityId: id, entityType: 'student' } }).catch(() => {})
+    await tx.student.delete({ where: { id } })
+
+    // Activity log for the vacate/delete
     await tx.activityLog.create({
       data: {
         actorId: adminId,
         actorType: 'admin',
-        action: 'UPDATED',
+        action: 'DELETED',
         entityType: 'student',
         entityId: id,
-        meta: { action: 'vacated', vacateDate: input.vacateDate },
+        meta: { action: 'vacated_and_deleted', studentId: student.studentId, name: student.name },
       },
-    })
+    }).catch(() => {})
   })
 
-  // Disable Supabase auth (don't delete — keep for re-admission)
-  // Student can no longer login since status is 'vacated' (blocked in auth middleware)
+  // Delete Supabase auth — student can no longer login
+  if (student.supabaseAuthId) {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(student.supabaseAuthId)
+    if (error) {
+      const { logger } = await import('../utils/logger')
+      logger.warn(`Supabase user deletion failed for ${student.studentId}: ${error.message}`)
+    }
+  }
 }

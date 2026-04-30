@@ -9,10 +9,8 @@ import api from '@/lib/api'
 import {
   LayoutDashboard, Users, BedDouble, IndianRupee, UtensilsCrossed,
   MessageSquare, Bell, DoorOpen,
-  BarChart3, Settings, LogOut, Building2, Star, Wifi, KeyRound,
-  GraduationCap, ChevronDown, ChevronUp,
+  Settings, LogOut, Building2, Star, Wifi, KeyRound,
 } from 'lucide-react'
-import { SemesterAdvancePanel } from './semester-advance-panel'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -25,22 +23,19 @@ const navItems = [
   { href: '/outpass', label: 'Outpass', icon: DoorOpen },
   { href: '/whatsapp', label: 'WhatsApp', icon: Wifi },
   { href: '/feedback', label: 'Feedback', icon: Star },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const { user, clearAuth } = useAuthStore()
-  const [semPanelOpen, setSemPanelOpen] = useState(false)
 
   const { data: branch } = useQuery({
     queryKey: ['branch-name', user?.branchId],
     queryFn: () => api.get(`/settings/branch/${user?.branchId}`).then(r => r.data.data),
     enabled: !!user?.branchId,
-    // PERF FIX: Branch name changes very rarely — cache for 10 minutes
-    staleTime: 10 * 60_000,
-    gcTime: 30 * 60_000,
+    staleTime: 0, // Always fresh — PG name may have changed
+    gcTime: 5 * 60_000,
   })
 
   const pgName = branch?.name ?? 'PG Hostel'
@@ -58,7 +53,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      {/* Nav — scrollable */}
+      {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
@@ -79,27 +74,6 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
             </Link>
           )
         })}
-
-        {/* ── Semester Advance Section ── */}
-        <div className="pt-2 mt-1 border-t border-gray-100">
-          <button
-            onClick={() => setSemPanelOpen(v => !v)}
-            className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors min-h-[2.75rem]"
-          >
-            <GraduationCap className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate flex-1 text-left">Advance Semester</span>
-            {semPanelOpen
-              ? <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
-              : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
-            }
-          </button>
-
-          {semPanelOpen && (
-            <div className="mt-1 ml-2 border-l-2 border-indigo-100 pl-1">
-              <SemesterAdvancePanel onClose={onClose} />
-            </div>
-          )}
-        </div>
       </nav>
 
       {/* User section */}

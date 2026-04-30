@@ -1,9 +1,19 @@
-import { sendWhatsAppMessage, templates } from './whatsapp.service'
+﻿import { sendWhatsAppMessage, templates } from './whatsapp.service'
 import { env } from '../config/env'
 import { formatIST } from '../utils/indianTime'
 import { prisma } from '../config/prisma'
 
-// ── Helper: fetch PG details for a student ────────────────────────────────
+// â”€â”€ Helper: get PG name from DB (always fresh, never from env) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function getDefaultPgName(): Promise<string> {
+  try {
+    const branch = await prisma.branch.findFirst({ select: { name: true } })
+    return branch?.name ?? env.PG_NAME
+  } catch {
+    return env.PG_NAME
+  }
+}
+
+// â”€â”€ Helper: fetch PG details for a student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getPgDetails(studentId: string): Promise<{
   pgName: string
   pgAddress?: string
@@ -26,18 +36,19 @@ async function getPgDetails(studentId: string): Promise<{
     })
     const branch = student?.room?.branch
     const addressParts = [branch?.address, branch?.city, branch?.state].filter(Boolean)
+    const pgName = branch?.name ?? await getDefaultPgName()
     return {
-      pgName: branch?.name ?? env.PG_NAME,
+      pgName,
       pgAddress: addressParts.length > 0 ? addressParts.join(', ') : undefined,
       pgContact: branch?.contactPrimary ?? undefined,
       roomNumber: student?.room?.roomNumber ?? undefined,
     }
   } catch {
-    return { pgName: env.PG_NAME }
+    return { pgName: await getDefaultPgName() }
   }
 }
 
-// ── Helper: fetch PG details by branchId ─────────────────────────────────
+// â”€â”€ Helper: fetch PG details by branchId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getPgDetailsByBranch(branchId: string): Promise<{
   pgName: string
   pgAddress?: string
@@ -49,17 +60,18 @@ async function getPgDetailsByBranch(branchId: string): Promise<{
       select: { name: true, address: true, city: true, state: true, contactPrimary: true },
     })
     const addressParts = [branch?.address, branch?.city, branch?.state].filter(Boolean)
+    const pgName = branch?.name ?? await getDefaultPgName()
     return {
-      pgName: branch?.name ?? env.PG_NAME,
+      pgName,
       pgAddress: addressParts.length > 0 ? addressParts.join(', ') : undefined,
       pgContact: branch?.contactPrimary ?? undefined,
     }
   } catch {
-    return { pgName: env.PG_NAME }
+    return { pgName: await getDefaultPgName() }
   }
 }
 
-// ── ADMISSION ─────────────────────────────────────────────────────────────
+// â”€â”€ ADMISSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyAdmission(data: {
   studentDbId: string
   studentName: string
@@ -74,7 +86,7 @@ export async function notifyAdmission(data: {
 }): Promise<void> {
   const pg = data.branchId
     ? await getPgDetailsByBranch(data.branchId)
-    : { pgName: env.PG_NAME }
+    : { pgName: await getDefaultPgName() }
 
   const studentMsg = templates.admissionWelcome({
     name: data.studentName,
@@ -118,7 +130,7 @@ export async function notifyAdmission(data: {
   }
 }
 
-// ── PAYMENT CONFIRMED (admin records cash / UTR verified) ─────────────────
+// â”€â”€ PAYMENT CONFIRMED (admin records cash / UTR verified) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyPaymentConfirmed(data: {
   studentDbId: string
   studentName: string
@@ -153,7 +165,7 @@ export async function notifyPaymentConfirmed(data: {
   })
 }
 
-// ── UTR SUBMITTED — notify admin ──────────────────────────────────────────
+// â”€â”€ UTR SUBMITTED â€” notify admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyUtrSubmittedAdmin(data: {
   studentDbId: string
   studentName: string
@@ -183,7 +195,7 @@ export async function notifyUtrSubmittedAdmin(data: {
   })
 }
 
-// ── UTR VERIFIED — notify student ─────────────────────────────────────────
+// â”€â”€ UTR VERIFIED â€” notify student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyUtrVerified(data: {
   studentDbId: string
   studentName: string
@@ -216,7 +228,7 @@ export async function notifyUtrVerified(data: {
   })
 }
 
-// ── UTR REJECTED — notify student ─────────────────────────────────────────
+// â”€â”€ UTR REJECTED â€” notify student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyUtrRejected(data: {
   studentDbId: string
   studentName: string
@@ -247,7 +259,7 @@ export async function notifyUtrRejected(data: {
   })
 }
 
-// ── ONLINE PAYMENT REQUEST — notify admin ─────────────────────────────────
+// â”€â”€ ONLINE PAYMENT REQUEST â€” notify admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyOnlinePaymentRequest(data: {
   studentDbId: string
   studentName: string
@@ -273,7 +285,7 @@ export async function notifyOnlinePaymentRequest(data: {
   })
 }
 
-// ── CASHFREE PAYMENT SUCCESS — notify student ─────────────────────────────
+// â”€â”€ CASHFREE PAYMENT SUCCESS â€” notify student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyOnlinePaymentSuccess(data: {
   studentDbId: string
   studentName: string
@@ -306,7 +318,7 @@ export async function notifyOnlinePaymentSuccess(data: {
   })
 }
 
-// ── COMPLAINT RESOLVED ────────────────────────────────────────────────────
+// â”€â”€ COMPLAINT RESOLVED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyComplaintResolved(data: {
   studentDbId: string
   studentName: string
@@ -336,7 +348,7 @@ export async function notifyComplaintResolved(data: {
   })
 }
 
-// ── OUTPASS STATUS ────────────────────────────────────────────────────────
+// â”€â”€ OUTPASS STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyOutpassStatus(data: {
   studentDbId: string
   studentName: string
@@ -369,7 +381,7 @@ export async function notifyOutpassStatus(data: {
   })
 }
 
-// ── STAY EXPIRY ───────────────────────────────────────────────────────────
+// â”€â”€ STAY EXPIRY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyStayExpiry(data: {
   studentDbId: string
   studentName: string
@@ -396,7 +408,7 @@ export async function notifyStayExpiry(data: {
   })
 }
 
-// ── NOTICE ALERT ──────────────────────────────────────────────────────────
+// â”€â”€ NOTICE ALERT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyNotice(data: {
   studentDbId?: string
   mobile: string
@@ -409,7 +421,7 @@ export async function notifyNotice(data: {
 }): Promise<void> {
   const pg = data.branchId
     ? await getPgDetailsByBranch(data.branchId)
-    : { pgName: env.PG_NAME }
+    : { pgName: await getDefaultPgName() }
 
   await sendWhatsAppMessage({
     mobile: data.mobile,
@@ -429,7 +441,7 @@ export async function notifyNotice(data: {
   })
 }
 
-// ── PASSWORD RESET OTP ────────────────────────────────────────────────────
+// â”€â”€ PASSWORD RESET OTP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function notifyPasswordResetOtp(data: {
   mobile: string
   otp: string
