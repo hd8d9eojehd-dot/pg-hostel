@@ -457,13 +457,34 @@ export async function getStudents(query: {
     ]
   }
 
+  // PERF FIX: Filter feeStatus at DB level using invoice subquery — avoids fetching all records then filtering in JS
+  if (query.feeStatus === 'overdue') {
+    where['invoices'] = { some: { status: 'overdue' } }
+  } else if (query.feeStatus === 'due') {
+    where['invoices'] = { some: { status: { in: ['due', 'partial'] } } }
+    where['NOT'] = { invoices: { some: { status: 'overdue' } } }
+  } else if (query.feeStatus === 'clear') {
+    where['invoices'] = { none: { status: { in: ['due', 'overdue', 'partial'] } } }
+  }
+
   const [students, total] = await Promise.all([
     prisma.student.findMany({
       where,
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
-      include: {
+      // PERF FIX: Select only needed columns — avoid fetching all student fields
+      select: {
+        id: true,
+        studentId: true,
+        name: true,
+        mobile: true,
+        status: true,
+        joiningDate: true,
+        stayEndDate: true,
+        college: true,
+        avatarUrl: true,
+        createdAt: true,
         room: { select: { roomNumber: true, roomType: true, floor: { select: { floorNumber: true } } } },
         bed: { select: { bedLabel: true } },
         invoices: {
@@ -484,11 +505,7 @@ export async function getStudents(query: {
     return { ...s, feeStatus, totalDue }
   })
 
-  const filtered = query.feeStatus
-    ? studentsWithFee.filter(s => s.feeStatus === query.feeStatus)
-    : studentsWithFee
-
-  return { students: filtered, pagination: getPaginationMeta(total, page, limit) }
+  return { students: studentsWithFee, pagination: getPaginationMeta(total, page, limit) }
 }
 
 export async function getStudentById(id: string) {

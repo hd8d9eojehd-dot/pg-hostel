@@ -90,6 +90,16 @@ export async function recordPayment(req: Request, res: Response, next: NextFunct
       }).catch(() => { /* non-blocking */ })
     }
 
+    // PERF FIX: Invalidate finance and portal caches after payment recorded
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache('cache:finance:*'),
+      invalidateCache('cache:dashboard:*'),
+      invalidateCache(`cache:portal:fee:${(req.body as RecordPaymentInput).studentId}`),
+      invalidateCache(`cache:portal:invoices:${(req.body as RecordPaymentInput).studentId}`),
+      invalidateCache(`cache:students:${(req.body as RecordPaymentInput).studentId}`),
+    ]).catch(() => {})
+
     res.status(201).json({ success: true, message: 'Payment recorded', data: payment })
   } catch (err) {
     next(err)
@@ -344,6 +354,16 @@ export async function verifyUtrPayment(req: Request, res: Response, next: NextFu
       receiptNumber: payment.receiptNumber,
       description: payment.invoice?.description ?? payment.invoice?.type,
     }).catch(() => {})
+
+    // PERF FIX: Invalidate finance and portal caches after UTR verification
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache('cache:finance:*'),
+      invalidateCache('cache:dashboard:*'),
+      invalidateCache(`cache:portal:fee:${payment.studentId}`),
+      invalidateCache(`cache:portal:invoices:${payment.studentId}`),
+      invalidateCache(`cache:portal:payments:${payment.studentId}`),
+    ]).catch(() => {})
 
     res.json({ success: true, message: 'Payment verified successfully', data: { receiptNumber: payment.receiptNumber } })
   } catch (err) { next(err) }

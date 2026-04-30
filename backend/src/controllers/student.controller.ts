@@ -37,6 +37,16 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
     )
     const { student, password, invoice, payment, receiptNumber } = result
 
+    // PERF FIX: Invalidate student list and stats caches after admission
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache('cache:students:list:*'),
+      invalidateCache('cache:students:stats'),
+      invalidateCache('cache:students:course-groups'),
+      invalidateCache('cache:rooms:*'),
+      invalidateCache('cache:dashboard:*'),
+    ]).catch(() => {})
+
     // Send WhatsApp welcome message to student and father
     if (student.room && student.bed) {
       notifyAdmission({
@@ -72,6 +82,16 @@ export async function deleteStudentPermanently(req: Request, res: Response, next
       req.body as DeleteStudentInput,
       req.user!.id
     )
+    // PERF FIX: Invalidate all related caches after permanent delete
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache(`cache:students:${req.params['id']!}`),
+      invalidateCache('cache:students:list:*'),
+      invalidateCache('cache:students:stats'),
+      invalidateCache('cache:rooms:*'),
+      invalidateCache('cache:dashboard:*'),
+      invalidateCache(`cache:portal:*`),
+    ]).catch(() => {})
     res.json({ success: true, message: 'Student permanently deleted', data: result })
   } catch (err) {
     next(err)
@@ -444,6 +464,15 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       }
     }
 
+    // PERF FIX: Invalidate student caches after update
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache(`cache:students:${req.params['id']!}`),
+      invalidateCache('cache:students:list:*'),
+      invalidateCache('cache:dashboard:*'),
+      invalidateCache(`cache:portal:*`),
+    ]).catch(() => {})
+
     res.json({ success: true, message: 'Student updated', data: student })
   } catch (err) {
     next(err)
@@ -471,6 +500,15 @@ export async function extendStay(req: Request, res: Response, next: NextFunction
 export async function vacateStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await studentService.vacateStudent(req.params['id']!, req.body as VacateStudentInput, req.user!.id)
+    // PERF FIX: Invalidate all student and room caches after vacate
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache(`cache:students:${req.params['id']!}`),
+      invalidateCache('cache:students:list:*'),
+      invalidateCache('cache:students:stats'),
+      invalidateCache('cache:rooms:*'),
+      invalidateCache('cache:dashboard:*'),
+    ]).catch(() => {})
     res.json({ success: true, message: 'Student vacated successfully' })
   } catch (err) {
     next(err)
