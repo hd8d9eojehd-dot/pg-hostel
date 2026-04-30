@@ -202,7 +202,7 @@ function RecordPaymentForm() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1 gap-1.5" asChild>
-                  <a href={`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api/v1'}/finance/receipts/${successPayment.receiptNumber}`}
+                  <a href={`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api/v1'}/finance/receipts/${successPayment.receiptNumber}?inline=1`}
                     target="_blank" rel="noopener noreferrer">
                     <Download className="w-4 h-4" /> Receipt
                   </a>

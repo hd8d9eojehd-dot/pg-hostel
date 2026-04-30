@@ -301,7 +301,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
       })
       if (semesters.length === 0) {
         const expectedFee = feePerSem + depositAmount
-        semesters = [{ sem: 1, feeAmount: expectedFee, status: 'current', invoice: null, paidAmount: 0, balance: expectedFee, canPayWithoutInvoice: true }]
+        semesters = [{ sem: 1, feeAmount: expectedFee, status: 'due', invoice: null, paidAmount: 0, balance: expectedFee, canPayWithoutInvoice: true }]
       }
     }
 
@@ -630,8 +630,8 @@ export async function createSemInvoice(req: Request, res: Response, next: NextFu
     // Calculate correct amount including deposit for sem 1
     let feePerSem = 0
     if (student.rentPackage === 'semester') feePerSem = Number(student.room?.semesterRent ?? 0)
-    else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0) * 6
-    else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0) / 2
+    else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0)
+    else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0)
     const depositAmt = Number(student.depositAmount ?? 5000)
     const correctAmount = semNumber === 1 ? feePerSem + depositAmt : feePerSem
     // Use the provided amount if it matches, otherwise use calculated

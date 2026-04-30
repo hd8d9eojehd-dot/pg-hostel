@@ -19,7 +19,7 @@ const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api
 type SemRow = {
   sem: number
   feeAmount: number
-  status: 'paid' | 'partial' | 'due' | 'overdue' | 'upcoming' | 'current'
+  status: 'paid' | 'partial' | 'due' | 'overdue' | 'no_record' | 'upcoming'
   paidAmount: number
   balance: number
   canPayWithoutInvoice?: boolean
@@ -307,7 +307,7 @@ export default function FinancePage() {
                 const hasPayments = (row.invoice?.payments?.length ?? 0) > 0
 
                 return (
-                  <Card key={row.sem} className={`overflow-hidden ${row.status === 'overdue' ? 'border-red-200' : row.status === 'current' || row.status === 'due' ? 'border-yellow-200' : ''}`}>
+                  <Card key={row.sem} className={`overflow-hidden ${row.status === 'overdue' ? 'border-red-200' : row.status === 'due' ? 'border-yellow-200' : ''}`}>
                     <CardContent className="p-0">
                       <div className="flex items-center gap-3 p-3">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${cfg.bg} ${cfg.color}`}>

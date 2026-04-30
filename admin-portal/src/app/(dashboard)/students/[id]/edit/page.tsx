@@ -56,8 +56,10 @@ export default function EditStudentPage() {
   const update = useMutation({
     mutationFn: (data: UpdateStudentInput) => api.patch(`/students/${id}`, data),
     onSuccess: () => {
+      // Invalidate all related queries so changes reflect everywhere immediately
       qc.invalidateQueries({ queryKey: ['student', id] })
       qc.invalidateQueries({ queryKey: ['students'] })
+      // Portal profile cache is invalidated server-side by the backend
       toast({ title: 'Student updated successfully' })
       router.push(`/students/${id}`)
     },
