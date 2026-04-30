@@ -478,8 +478,8 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
       // Calculate correct amount for this semester (sem 1 includes deposit)
       let feePerSem = 0
       if (student.rentPackage === 'semester') feePerSem = Number(student.room?.semesterRent ?? 0)
-      else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0) * 6
-      else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0) / 2
+      else if (student.rentPackage === 'monthly') feePerSem = Number(student.room?.monthlyRent ?? 0)
+      else if (student.rentPackage === 'annual') feePerSem = Number(student.room?.annualRent ?? 0)
       const depositAmt = Number(student.depositAmount ?? 5000)
       const semInvoiceAmount = semNumber === 1 ? feePerSem + depositAmt : feePerSem
 
@@ -573,6 +573,14 @@ export async function submitPaymentRequest(req: Request, res: Response, next: Ne
       message: 'Payment submitted for verification. Admin will confirm within 24 hours.',
       data: { receiptNumber, utrStatus: 'pending' },
     })
+
+    // PERF FIX: Invalidate portal payment caches after UTR submission
+    const { invalidateCache } = await import('../middleware/cache.middleware')
+    await Promise.all([
+      invalidateCache(`cache:portal:payments:${studentId}`),
+      invalidateCache(`cache:portal:fee:${studentId}`),
+      invalidateCache('cache:finance:pending-utr'),
+    ]).catch(() => {})
   } catch (err) { next(err) }
 }
 

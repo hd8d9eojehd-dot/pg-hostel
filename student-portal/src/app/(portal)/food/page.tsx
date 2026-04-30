@@ -35,11 +35,10 @@ export default function FoodPage() {
   const [view, setView] = useState<'today' | 'month'>('today')
   const today = new Date()
 
-  // Home data for today's meals
+  // Home data for today's meals — use global staleTime (5min)
   const { data: homeData } = useQuery({
     queryKey: ['portal-home'],
     queryFn: () => api.get('/portal/home').then(r => r.data.data),
-    staleTime: 2 * 60 * 1000,
   })
 
   // Month data
