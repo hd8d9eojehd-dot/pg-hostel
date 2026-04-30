@@ -354,7 +354,7 @@ export default function StudentDetailPage() {
                   <InfoRow label="Floor" value={student.room?.floor?.floorName ?? `Floor ${student.room?.floor?.floorNumber}`} />
                   <InfoRow label="Joining" value={formatDate(student.joiningDate)} />
                   <InfoRow label="Stay Until" value={formatDate(student.stayEndDate)} />
-                  <InfoRow label="Duration" value={student.stayDuration} />
+                  <InfoRow label="Semesters" value={`Sem ${student.semester ?? 1} of ${(student as { totalSemesters?: number }).totalSemesters ?? 8}`} />
                   <InfoRow label="Package" value={student.rentPackage} />
                   <InfoRow label="Deposit" value={formatCurrency(Number(student.depositAmount))} />
                 </CardContent>

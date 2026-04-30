@@ -47,7 +47,7 @@ export default function NewStudentPage() {
 
   const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<CreateStudentInput>({
     resolver: zodResolver(CreateStudentSchema),
-    defaultValues: { stayDuration: '12months', rentPackage: 'semester', depositAmount: DEPOSIT_AMOUNT, yearOfStudy: 1, semester: 1, totalSemesters: 8 },
+    defaultValues: { rentPackage: 'semester', depositAmount: DEPOSIT_AMOUNT, yearOfStudy: 1, semester: 1, totalSemesters: 8 },
   })
 
   const rentPackage = watch('rentPackage')
@@ -293,7 +293,7 @@ export default function NewStudentPage() {
             </CardContent>
           </Card>
 
-          {/* Stay Info — no stay duration */}
+          {/* Stay Info — stay end date auto-calculated from semesters */}
           <Card>
             <CardHeader><CardTitle className="text-base">🏠 Stay Details</CardTitle></CardHeader>
             <CardContent className="grid sm:grid-cols-2 gap-4">
@@ -309,6 +309,15 @@ export default function NewStudentPage() {
                 </select>
               </div>
               <F label="Deposit Amount (Rs.)" name="depositAmount" type="number" required />
+              <div className="space-y-1.5">
+                <Label>Stay End Date <span className="text-xs text-gray-400">(auto-calculated)</span></Label>
+                <div className="h-10 rounded-lg border border-input bg-gray-50 px-3 flex items-center text-sm text-gray-500">
+                  {totalSemesters > 0 && currentSemester > 0
+                    ? `${(totalSemesters - currentSemester + 1) * 6} months from joining`
+                    : 'Set year/sems above'}
+                </div>
+                <p className="text-xs text-gray-400">= {totalSemesters - currentSemester + 1} remaining sems × 6 months each</p>
+              </div>
               <div className="sm:col-span-2 space-y-1.5">
                 <Label>Notes</Label>
                 <Textarea {...register('notes')} placeholder="Any additional notes..." />

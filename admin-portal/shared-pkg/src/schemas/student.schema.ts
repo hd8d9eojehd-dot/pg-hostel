@@ -9,8 +9,8 @@ const aadhaarNumber = z
   .string()
   .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
 
-// Free-form stay duration: e.g. "12months", "6months", "1year", "18months"
-const stayDurationSchema = z.string().regex(/^\d+(months?|years?)$/, 'Stay duration must be like 12months or 1year')
+// Free-form stay duration: kept for backward compatibility but now optional
+const stayDurationSchema = z.string().regex(/^\d+(months?|years?)$/, 'Stay duration must be like 12months or 1year').optional()
 
 export const CreateStudentSchema = z.object({
   name: z.string().min(2).max(100).trim(),
@@ -32,7 +32,7 @@ export const CreateStudentSchema = z.object({
   semester: z.number().int().min(1).max(12),
   totalSemesters: z.number().int().min(1).max(16).default(8),
   joiningDate: z.string().date(),
-  stayDuration: stayDurationSchema,
+  stayDuration: stayDurationSchema,  // optional — computed from semesters if not provided
   rentPackage: z.enum(RENT_PACKAGE),
   depositAmount: z.number().min(0).max(999999),
   notes: z.string().max(1000).optional(),
@@ -59,7 +59,7 @@ export const RenewStudentSchema = z.object({
   roomId: z.string().uuid(),
   bedId: z.string().uuid(),
   joiningDate: z.string().date(),
-  stayDuration: stayDurationSchema,
+  stayDuration: stayDurationSchema,  // optional — computed from semesters
   rentPackage: z.enum(RENT_PACKAGE),
   depositAmount: z.number().min(0).max(999999),
 })

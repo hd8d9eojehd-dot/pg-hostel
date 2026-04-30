@@ -328,7 +328,12 @@ export default function FinancePage() {
                             )}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-xs text-gray-500">Fee: {formatCurrency(row.feeAmount)}</span>
+                            <span className="text-xs text-gray-500">
+                              Fee: {formatCurrency(row.sem === 1 ? row.feeAmount - d.summary.depositAmount : row.feeAmount)}
+                              {row.sem === 1 && d.summary.depositAmount > 0 && (
+                                <span className="text-gray-400"> + ₹{d.summary.depositAmount.toLocaleString('en-IN')} deposit</span>
+                              )}
+                            </span>
                             {row.paidAmount > 0 && <span className="text-xs text-green-600">Paid: {formatCurrency(row.paidAmount)}</span>}
                             {row.balance > 0 && <span className="text-xs text-red-600 font-medium">Due: {formatCurrency(row.balance)}</span>}
                           </div>

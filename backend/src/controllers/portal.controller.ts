@@ -253,7 +253,8 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
       if (invoice) {
         status = invoice.status as 'paid' | 'partial' | 'due' | 'overdue'
       } else if (sem < currentSem) {
-        status = 'paid' // no invoice = assumed paid for past sems
+        // No invoice for past sem — show as 'no_record' but treat as paid for summary
+        status = 'paid'
       } else if (sem === currentSem) {
         status = 'current'
       } else {
@@ -261,7 +262,7 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
       }
 
       const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? expectedFee : 0)
-      const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : sem === currentSem ? expectedFee : 0)
+      const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : expectedFee)
 
       return {
         sem,

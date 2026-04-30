@@ -351,44 +351,61 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       const fullStudent = await prisma.student.findUnique({
         where: { id: req.params['id']! },
         select: {
-          id: true, rentPackage: true, depositAmount: true,
+          id: true, rentPackage: true, depositAmount: true, joiningDate: true, totalSemesters: true,
           room: { select: { semesterRent: true, monthlyRent: true, annualRent: true } },
         },
       })
 
-      if (fullStudent?.room) {
-        let feePerSem = 0
-        if (fullStudent.rentPackage === 'semester') feePerSem = Number(fullStudent.room.semesterRent ?? 0)
-        else if (fullStudent.rentPackage === 'monthly') feePerSem = Number(fullStudent.room.monthlyRent ?? 0) * 6
-        else if (fullStudent.rentPackage === 'annual') feePerSem = Number(fullStudent.room.annualRent ?? 0) / 2
+      if (fullStudent) {
+        // Recalculate stayEndDate based on new semester
+        const { stayEndDateFromSemesters } = await import('../utils/indianTime')
+        const totalSems = (fullStudent as { totalSemesters?: number }).totalSemesters ?? 8
+        const newEndDate = stayEndDateFromSemesters(new Date(fullStudent.joiningDate), newSem, totalSems)
+        const newDuration = `${(totalSems - newSem + 1) * 6}months`
 
-        if (feePerSem > 0) {
-          // Check if invoice already exists for this semester
-          const existing = await prisma.invoice.findFirst({
-            where: { studentId: req.params['id']!, type: 'rent', semesterNumber: newSem },
-          })
+        await prisma.student.update({
+          where: { id: req.params['id']! },
+          data: {
+            stayEndDate: newEndDate,
+            stayDuration: newDuration,
+            updatedAt: new Date(),
+          },
+        })
 
-          if (!existing) {
-            const { generateInvoiceNumber } = await import('../utils/studentId')
-            const invoiceNumber = await generateInvoiceNumber()
-            const dueDate = new Date()
-            dueDate.setDate(dueDate.getDate() + 7)
+        // Create invoice for new semester if room exists
+        if (fullStudent.room) {
+          let feePerSem = 0
+          if (fullStudent.rentPackage === 'semester') feePerSem = Number(fullStudent.room.semesterRent ?? 0)
+          else if (fullStudent.rentPackage === 'monthly') feePerSem = Number(fullStudent.room.monthlyRent ?? 0) * 6
+          else if (fullStudent.rentPackage === 'annual') feePerSem = Number(fullStudent.room.annualRent ?? 0) / 2
 
-            await prisma.invoice.create({
-              data: {
-                studentId: req.params['id']!,
-                invoiceNumber,
-                type: 'rent',
-                description: `Semester ${newSem} fee`,
-                amount: feePerSem,
-                totalAmount: feePerSem,
-                balance: feePerSem,
-                dueDate,
-                status: 'due',
-                semesterNumber: newSem,
-                generatedBy: req.user!.id,
-              },
+          if (feePerSem > 0) {
+            const existing = await prisma.invoice.findFirst({
+              where: { studentId: req.params['id']!, type: 'rent', semesterNumber: newSem },
             })
+
+            if (!existing) {
+              const { generateInvoiceNumber } = await import('../utils/studentId')
+              const invoiceNumber = await generateInvoiceNumber()
+              const dueDate = new Date()
+              dueDate.setDate(dueDate.getDate() + 7)
+
+              await prisma.invoice.create({
+                data: {
+                  studentId: req.params['id']!,
+                  invoiceNumber,
+                  type: 'rent',
+                  description: `Semester ${newSem} fee`,
+                  amount: feePerSem,
+                  totalAmount: feePerSem,
+                  balance: feePerSem,
+                  dueDate,
+                  status: 'due',
+                  semesterNumber: newSem,
+                  generatedBy: req.user!.id,
+                },
+              })
+            }
           }
         }
       }
@@ -568,6 +585,7 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
         totalSemesters: true,
         rentPackage: true,
         depositAmount: true,
+        joiningDate: true,
         room: {
           select: {
             id: true,
@@ -589,10 +607,20 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
 
     for (const student of students) {
       try {
-        // 1. Update semester
+        // 1. Update semester AND recalculate stayEndDate
+        const { stayEndDateFromSemesters } = await import('../utils/indianTime')
+        const totalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
+        const newStayEnd = stayEndDateFromSemesters(new Date((student as { joiningDate: Date }).joiningDate), newSem, totalSems)
+        const newDuration = `${(totalSems - newSem + 1) * 6}months`
+
         await prisma.student.update({
           where: { id: student.id },
-          data: { semester: newSem, updatedAt: new Date() },
+          data: {
+            semester: newSem,
+            stayEndDate: newStayEnd,
+            stayDuration: newDuration,
+            updatedAt: new Date(),
+          },
         })
 
         // 2. Calculate fee for new semester

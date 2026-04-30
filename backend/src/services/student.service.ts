@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma'
 import { supabaseAdmin } from '../config/supabase'
 import { generateStudentId, generateInvoiceNumber, generateReceiptNumber } from '../utils/studentId'
-import { stayEndDate, todayIST } from '../utils/indianTime'
+import { stayEndDate, stayEndDateFromSemesters, todayIST } from '../utils/indianTime'
 import { startOfDay } from 'date-fns'
 import { ApiError } from '../middleware/error.middleware'
 import type {
@@ -22,7 +22,12 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
 
   const joinDate = new Date(input.joiningDate)
   const studentId = await generateStudentId(joinDate)
-  const endDate = stayEndDate(joinDate, input.stayDuration)
+  const totalSems = (input as { totalSemesters?: number }).totalSemesters ?? 8
+  const currentSem = input.semester ?? 1
+  // Stay end date = semester-based: remaining sems × 6 months each
+  const endDate = stayEndDateFromSemesters(joinDate, currentSem, totalSems)
+  // Store computed duration for display
+  const computedDuration = `${(totalSems - currentSem + 1) * 6}months`
 
   // Password = studentId (e.g. PG-2026-4821) — no temp password, no forced change
   const initialPassword = studentId
@@ -62,7 +67,7 @@ export async function createStudent(input: CreateStudentInput, adminId: string) 
         emergencyContact: input.emergencyContact,
         emergencyContactName: input.emergencyContactName,
         joiningDate: joinDate,
-        stayDuration: input.stayDuration,
+        stayDuration: computedDuration,
         stayEndDate: endDate,
         roomId: input.roomId,
         bedId: input.bedId,
@@ -276,7 +281,11 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
   if (newBed.isOccupied) throw new ApiError(409, 'Selected bed is already occupied')
 
   const joinDate = new Date(input.joiningDate)
-  const endDate = stayEndDate(joinDate, input.stayDuration)
+  // For renewal, use existing student's semester data for stay end date
+  const renewTotalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
+  const renewCurrentSem = student.semester ?? 1
+  const endDate = stayEndDateFromSemesters(joinDate, renewCurrentSem, renewTotalSems)
+  const computedDuration = `${(renewTotalSems - renewCurrentSem + 1) * 6}months`
 
   const newRoom = await prisma.room.findUnique({
     where: { id: input.roomId },
@@ -292,7 +301,7 @@ export async function renewStudent(id: string, input: RenewStudentInput, adminId
         roomId: input.roomId,
         bedId: input.bedId,
         joiningDate: joinDate,
-        stayDuration: input.stayDuration,
+        stayDuration: computedDuration,
         stayEndDate: endDate,
         rentPackage: input.rentPackage,
         depositAmount: input.depositAmount,
