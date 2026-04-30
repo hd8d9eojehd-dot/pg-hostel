@@ -49,12 +49,12 @@ type FeeData = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  paid:     { label: 'Paid',     color: 'text-green-700',  bg: 'bg-green-100',  icon: 'OK' },
-  partial:  { label: 'Partial',  color: 'text-orange-700', bg: 'bg-orange-100', icon: '~' },
-  due:      { label: 'Due',      color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '...' },
-  overdue:  { label: 'Overdue',  color: 'text-red-700',    bg: 'bg-red-100',    icon: '!' },
-  current:  { label: 'Current',  color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '->' },
-  upcoming: { label: 'Upcoming', color: 'text-gray-500',   bg: 'bg-gray-100',   icon: 'o' },
+  paid:      { label: 'Paid',       color: 'text-green-700',  bg: 'bg-green-100',  icon: 'OK' },
+  partial:   { label: 'Partial',    color: 'text-orange-700', bg: 'bg-orange-100', icon: '~' },
+  due:       { label: 'Due',        color: 'text-yellow-700', bg: 'bg-yellow-100', icon: '...' },
+  overdue:   { label: 'Overdue',    color: 'text-red-700',    bg: 'bg-red-100',    icon: '!' },
+  no_record: { label: 'No Record',  color: 'text-gray-400',   bg: 'bg-gray-100',   icon: '-' },
+  upcoming:  { label: 'Upcoming',   color: 'text-gray-500',   bg: 'bg-gray-100',   icon: 'o' },
 }
 
 function periodLabel(rentPackage: string, sem: number): string {
@@ -195,7 +195,7 @@ export default function FinancePage() {
   const pendingOther = otherInvoices.filter(i => ['due', 'overdue', 'partial'].includes(i.status))
   const paidOther = otherInvoices.filter(i => i.status === 'paid')
   const payableSems = semesters.filter(s =>
-    ['due', 'overdue', 'partial', 'current'].includes(s.status) && (s.invoice || s.canPayWithoutInvoice) && s.balance > 0
+    ['due', 'overdue', 'partial'].includes(s.status) && (s.invoice || s.canPayWithoutInvoice) && s.balance > 0
   )
 
   return (
@@ -303,7 +303,7 @@ export default function FinancePage() {
               {semesters.map(row => {
                 const cfg = STATUS_CONFIG[row.status] ?? STATUS_CONFIG['upcoming']
                 const isExpanded = expandedSem === row.sem
-                const canPay = ['due', 'overdue', 'partial', 'current'].includes(row.status) && (row.invoice || row.canPayWithoutInvoice)
+                const canPay = ['due', 'overdue', 'partial'].includes(row.status) && (row.invoice || row.canPayWithoutInvoice)
                 const hasPayments = (row.invoice?.payments?.length ?? 0) > 0
 
                 return (

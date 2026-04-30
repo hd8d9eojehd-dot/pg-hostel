@@ -31,6 +31,9 @@ export default function ProfilePage() {
   const { data: profile, isLoading } = useQuery({
     queryKey: ['my-profile'],
     queryFn: () => api.get('/portal/profile').then(r => r.data.data),
+    // Always fetch fresh profile — admin may have updated details
+    staleTime: 0,
+    gcTime: 5 * 60_000,
   })
 
   const { data: myFeedback } = useQuery({

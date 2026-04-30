@@ -24,14 +24,26 @@ export default function WhatsAppPage() {
 
   // Component that fetches QR image from backend (avoids client-side canvas issues)
   function WhatsAppQrImage() {
-    const { data: qrData, isLoading } = useQuery({
+    const { data: qrData, isLoading, isError } = useQuery({
       queryKey: ['wa-qr-image'],
       queryFn: () => api.get('/whatsapp/qr-image').then(r => r.data.data),
-      refetchInterval: 18000, // refresh every 18s (QR expires at 20s)
+      refetchInterval: 3000, // poll every 3s — QR expires at 20s, need to catch it quickly
       staleTime: 0,
+      retry: false, // don't retry on 404 — just wait for next poll
     })
-    if (isLoading) return <div className="w-[min(220px,80vw)] aspect-square bg-gray-100 rounded-xl animate-pulse flex items-center justify-center"><QrCode className="w-8 h-8 text-gray-300" /></div>
-    if (!qrData?.dataUrl) return <div className="w-[min(220px,80vw)] aspect-square bg-gray-100 rounded-xl flex items-center justify-center text-xs text-gray-400">QR loading...</div>
+    if (isLoading) return (
+      <div className="w-[min(220px,80vw)] aspect-square bg-gray-50 rounded-xl flex flex-col items-center justify-center gap-2">
+        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+        <p className="text-xs text-gray-400">Generating QR...</p>
+      </div>
+    )
+    if (isError || !qrData?.dataUrl) return (
+      <div className="w-[min(220px,80vw)] aspect-square bg-gray-50 rounded-xl flex flex-col items-center justify-center gap-2">
+        <QrCode className="w-8 h-8 text-gray-300" />
+        <p className="text-xs text-gray-400">Waiting for QR...</p>
+        <p className="text-[10px] text-gray-300">Auto-refreshing every 3s</p>
+      </div>
+    )
     return <img src={qrData.dataUrl} alt="WhatsApp QR Code" className="rounded-xl border shadow-sm w-[min(220px,80vw)] aspect-square" />
   }
 
@@ -149,10 +161,15 @@ export default function WhatsAppPage() {
   const reconnectWa = useMutation({
     mutationFn: () => api.post('/whatsapp/reconnect'),
     onSuccess: () => {
-      toast({ title: '✓ Reconnecting...', description: 'QR code will appear shortly. Click Refresh.' })
-      // Poll more aggressively after reconnect
-      setTimeout(() => refetchStatus(), 3000)
-      setTimeout(() => refetchStatus(), 8000)
+      toast({ title: 'Reconnecting WhatsApp...', description: 'QR code will appear in 5-10 seconds. Page will update automatically.' })
+      // Aggressively poll after reconnect — QR takes ~5s to generate
+      qc.invalidateQueries({ queryKey: ['wa-status'] })
+      qc.invalidateQueries({ queryKey: ['wa-qr-image'] })
+      const intervals = [2000, 4000, 6000, 8000, 10000, 15000, 20000]
+      intervals.forEach(ms => setTimeout(() => {
+        refetchStatus()
+        qc.invalidateQueries({ queryKey: ['wa-qr-image'] })
+      }, ms))
     },
     onError: (e: unknown) => toast({ title: 'Reconnect failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
   })
@@ -216,18 +233,29 @@ export default function WhatsAppPage() {
             </div>
 
             {/* QR Code panel — shown when WhatsApp needs to be linked */}
-            {!status?.ready && status?.qrAvailable && status?.qr && (
-              <div className="mt-4 flex flex-col items-center gap-3 p-4 bg-white rounded-xl border border-red-200">
+            {!status?.ready && status?.qrAvailable && (
+              <div className="mt-4 flex flex-col items-center gap-3 p-4 bg-white rounded-xl border border-orange-200">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                   <QrCode className="w-4 h-4" /> Scan with WhatsApp to link this device
                 </div>
                 <WhatsAppQrImage />
                 <div className="text-xs text-gray-500 text-center space-y-1">
                   <p>1. Open WhatsApp on your phone</p>
-                  <p>2. Tap <strong>⋮ Menu → Linked Devices → Link a Device</strong></p>
+                  <p>2. Tap <strong>Menu → Linked Devices → Link a Device</strong></p>
                   <p>3. Point your camera at the QR code above</p>
-                  <p className="text-orange-600 font-medium">QR refreshes every 20 seconds — click Refresh if it expires</p>
+                  <p className="text-orange-600 font-medium">QR refreshes every 18 seconds automatically</p>
                 </div>
+              </div>
+            )}
+            {/* Waiting for QR to generate after reconnect */}
+            {!status?.ready && !status?.qrAvailable && reconnectWa.isSuccess && (
+              <div className="mt-4 flex flex-col items-center gap-3 p-4 bg-white rounded-xl border border-blue-200">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-sm text-blue-700 font-medium">Generating QR code...</p>
+                <p className="text-xs text-gray-500">This takes 5-10 seconds. Page updates automatically.</p>
+                <Button variant="outline" size="sm" onClick={() => { refetchStatus(); qc.invalidateQueries({ queryKey: ['wa-qr-image'] }) }}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Check Now
+                </Button>
               </div>
             )}
           </CardContent>

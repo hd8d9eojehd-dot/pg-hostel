@@ -383,29 +383,8 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       if (newSem > totalSems) {
         throw new ApiError(400, `Cannot advance beyond total semesters (${totalSems})`)
       }
-
-      // Min 3 months since ADMISSION (joiningDate / createdAt), not since last profile update
-      // This prevents changing sem on day 1, but allows it after 3 months of stay
-      const admissionDate = new Date(currentStudent.createdAt)
-      const now = new Date()
-      const monthsSinceAdmission = (now.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
-
-      // Only enforce the 3-month rule if this is NOT the first sem advance (sem 1 → 2)
-      // For sem 1→2, check against admission date. For later advances, check against last sem change.
-      // We track last sem change via a dedicated field — fall back to updatedAt if not available
-      if (currentSem > 1) {
-        // For sem 2+ advances, check 3 months since last update
-        const lastUpdate = new Date(currentStudent.updatedAt)
-        const monthsSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24 * 30)
-        if (monthsSinceUpdate < 3) {
-          throw new ApiError(400, `Semester can only be changed after 3 months. Last changed ${Math.floor(monthsSinceUpdate * 30)} days ago.`)
-        }
-      } else {
-        // For first advance (sem 1→2), check 3 months since admission
-        if (monthsSinceAdmission < 3) {
-          throw new ApiError(400, `Semester can only be advanced after 3 months of stay. Admitted ${Math.floor(monthsSinceAdmission * 30)} days ago.`)
-        }
-      }
+      // Note: Admin can advance semester at any time — no time restriction enforced here.
+      // The 3-month rule is a guideline, not enforced in code, to allow flexibility.
     }
 
     const student = await studentService.updateStudent(req.params['id']!, updateData as UpdateStudentInput)
@@ -476,13 +455,17 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       }
     }
 
-    // PERF FIX: Invalidate student caches after update
+    // Invalidate student caches after update — including portal profile so student sees changes immediately
     const { invalidateCache } = await import('../middleware/cache.middleware')
     await Promise.all([
       invalidateCache(`cache:students:${req.params['id']!}`),
       invalidateCache('cache:students:list:*'),
       invalidateCache('cache:dashboard:*'),
-      invalidateCache(`cache:portal:*`),
+      invalidateCache(`cache:portal:profile:${req.params['id']!}`),
+      invalidateCache(`cache:portal:home:${req.params['id']!}`),
+      invalidateCache(`cache:portal:fee:${req.params['id']!}`),
+      invalidateCache(`cache:portal:idcard:${req.params['id']!}`),
+      invalidateCache(`cache:portal:invoices:${req.params['id']!}`),
     ]).catch(() => {})
 
     // If semester was advanced, send WhatsApp notification to student
@@ -618,7 +601,7 @@ export async function getCourseGroups(_req: Request, res: Response, next: NextFu
     }>()
 
     for (const s of students) {
-      const course = s.course ?? 'Unknown'
+      const course = s.course ?? 'General'
       const branch = s.branch ?? ''
       const sem = s.semester ?? 1
       const totalSems = (s as { totalSemesters?: number }).totalSemesters ?? 8
@@ -679,7 +662,10 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
     const students = await prisma.student.findMany({
       where: {
         status: 'active',
-        course: { equals: course, mode: 'insensitive' },
+        // Handle "General" group (students with no course set)
+        course: course === 'General'
+          ? { in: [null as unknown as string, '', 'General'] }
+          : { equals: course, mode: 'insensitive' },
         branch: branch ? { equals: branch, mode: 'insensitive' } : undefined,
         semester: currentSem,
       },

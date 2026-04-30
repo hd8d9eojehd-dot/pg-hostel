@@ -244,28 +244,42 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
       semesters = Array.from({ length: totalSems }, (_, i) => {
         const sem = i + 1
         const isFirstSem = sem === 1
+        // Match invoice strictly by semesterNumber
         const invoice = rentInvoices.find(inv => {
           const invSem = (inv as { semesterNumber?: number }).semesterNumber
-          if (invSem) return invSem === sem
-          return rentInvoices.indexOf(inv) === i
+          return invSem === sem
         })
+        // For sem 1, fee includes deposit; for others, just the period fee
         const expectedFee = isFirstSem ? sem1Total : feePerSem
         let status: string
-        if (invoice) { status = invoice.status }
-        else if (sem < currentSem) { status = 'paid' }
-        else if (sem === currentSem) { status = 'current' }
-        else { status = 'upcoming' }
-        const paidAmount = invoice ? Number(invoice.paidAmount) : (sem < currentSem ? expectedFee : 0)
-        const balance = invoice ? Number(invoice.balance) : (sem < currentSem ? 0 : expectedFee)
+        if (invoice) {
+          // Use actual invoice status — 'due', 'paid', 'partial', 'overdue'
+          status = invoice.status
+        } else if (sem < currentSem) {
+          // No invoice for past sem — show as no_record (not assumed paid)
+          status = 'no_record'
+        } else if (sem === currentSem) {
+          // Current sem with no invoice yet — show as due (needs payment)
+          status = 'due'
+        } else {
+          status = 'upcoming'
+        }
+        // Balance: if invoice exists use it; if past sem with no invoice, 0; if current/future, full fee
+        const paidAmount = invoice ? Number(invoice.paidAmount) : 0
+        const balance = invoice ? Number(invoice.balance) : (sem <= currentSem && sem > 0 ? expectedFee : 0)
+        // For past sems with no invoice, balance is 0 (not collected at this PG)
+        const effectiveBalance = (sem < currentSem && !invoice) ? 0 : balance
         return {
           sem, feeAmount: expectedFee, status,
           invoice: invoice ? {
             id: invoice.id, invoiceNumber: invoice.invoiceNumber,
-            totalAmount: Number(invoice.totalAmount), paidAmount, balance,
+            totalAmount: Number(invoice.totalAmount), paidAmount,
+            balance: Number(invoice.balance),
             dueDate: invoice.dueDate, lateFee: Number(invoice.lateFee ?? 0),
             payments: invoice.payments.map(p => ({ id: p.id, receiptNumber: p.receiptNumber, amount: Number(p.amount), paymentMode: p.paymentMode, transactionRef: p.transactionRef, paidDate: p.paidDate })),
           } : null,
-          paidAmount, balance,
+          paidAmount,
+          balance: effectiveBalance,
           canPayWithoutInvoice: !invoice && sem === currentSem && expectedFee > 0,
         }
       })
@@ -327,7 +341,10 @@ export async function getMyFeeStructure(req: Request, res: Response, next: NextF
     const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0)
 
     const totalDue = semesters
-      .filter(r => ['due', 'overdue', 'partial', 'current'].includes(r.status))
+      .filter(r => ['due', 'overdue', 'partial'].includes(r.status) && r.invoice)
+      .reduce((s, r) => s + Number(r.invoice!.balance), 0)
+      + semesters
+      .filter(r => r.status === 'due' && !r.invoice && r.canPayWithoutInvoice)
       .reduce((s, r) => s + r.balance, 0)
       + otherInvoices.filter(i => ['due', 'overdue', 'partial'].includes(i.status))
           .reduce((s, i) => s + i.balance, 0)

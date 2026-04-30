@@ -69,7 +69,7 @@ export async function recordPayment(req: Request, res: Response, next: NextFunct
     // Notify student with full context
     const student = await prisma.student.findUnique({
       where: { id: (req.body as RecordPaymentInput).studentId },
-      select: { id: true, name: true, studentId: true, mobile: true },
+      select: { id: true, name: true, studentId: true, mobile: true, parentMobile: true },
     })
     // Fetch invoice description for context
     const invoice = await prisma.invoice.findUnique({
@@ -88,6 +88,20 @@ export async function recordPayment(req: Request, res: Response, next: NextFunct
         paidDate: payment.paidDate,
         description: invoice?.description ?? invoice?.type,
       }).catch(() => { /* non-blocking */ })
+      // Also notify parent if different number
+      if (student.parentMobile && student.parentMobile !== student.mobile) {
+        notifyPaymentConfirmed({
+          studentDbId: student.id,
+          studentName: student.name,
+          studentId: student.studentId,
+          mobile: student.parentMobile,
+          amount: (req.body as RecordPaymentInput).amount,
+          paymentMode: (req.body as RecordPaymentInput).paymentMode,
+          receiptNumber: payment.receiptNumber,
+          paidDate: payment.paidDate,
+          description: invoice?.description ?? invoice?.type,
+        }).catch(() => { /* non-blocking */ })
+      }
     }
 
     // PERF FIX: Invalidate finance and portal caches after payment recorded

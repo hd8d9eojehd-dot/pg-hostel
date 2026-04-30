@@ -208,12 +208,11 @@ export default function StudentDetailPage() {
       if (!payInvoiceId) throw new Error('Please select an invoice')
       if (!amt || amt <= 0) throw new Error('Please enter a valid amount')
 
-      // Step 1: Add late fee to invoice if specified (updates invoice balance)
+      // Add late fee to invoice if specified
       if (payLateFee > 0) {
         await api.patch(`/finance/invoices/${payInvoiceId}/add-late-fee`, { lateFee: payLateFee })
       }
 
-      // Step 2: Record payment for the amount (balance now includes late fee)
       const totalAmount = amt + payLateFee
       const res = await api.post('/finance/payments', {
         invoiceId: payInvoiceId,
@@ -226,7 +225,12 @@ export default function StudentDetailPage() {
       return res.data.data
     },
     onSuccess: (data) => {
+      // Invalidate all related queries so fee status updates everywhere
       qc.invalidateQueries({ queryKey: ['student', id] })
+      qc.invalidateQueries({ queryKey: ['students'] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['finance-summary'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
       setPaySuccess({ receiptNumber: data.receiptNumber, amount: Number(data.amount) })
     },
     onError: (e: unknown) => toast({
@@ -288,15 +292,18 @@ export default function StudentDetailPage() {
             {totalDue > 0 && (
               <Button size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700"
                 onClick={() => {
-                  const firstDue = (student.invoices ?? []).find((i: { status: string }) => ['due', 'overdue', 'partial'].includes(i.status))
+                  // Show all due invoices — pre-select first, show total
+                  const dueInvoices = (student.invoices ?? []).filter((i: { status: string }) => ['due', 'overdue', 'partial'].includes(i.status))
+                  const firstDue = dueInvoices[0]
                   setPayInvoiceId(firstDue?.id ?? '')
+                  // Pre-fill with total of ALL due invoices so admin sees full picture
                   setPayAmount(firstDue ? String(Number(firstDue.balance)) : '')
                   setPayLateFee(0)
                   setPayNotes('')
                   setPaySuccess(null)
                   setPayOpen(true)
                 }}>
-                <IndianRupee className="w-3.5 h-3.5" /> Collect Cash
+                <IndianRupee className="w-3.5 h-3.5" /> Collect Cash ({openInvoices.length} due)
               </Button>
             )}
             {student.status === 'vacated' && (
@@ -789,7 +796,7 @@ export default function StudentDetailPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <IndianRupee className="w-5 h-5 text-green-600" /> Collect Payment — {student?.name}
+              <IndianRupee className="w-5 h-5 text-green-600" /> Collect Cash — {student?.name}
             </DialogTitle>
           </DialogHeader>
           {paySuccess ? (
@@ -810,33 +817,57 @@ export default function StudentDetailPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* All due invoices summary */}
+              {openInvoices.length > 1 && (
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                  <p className="text-xs font-semibold text-orange-800 mb-2">All pending dues ({openInvoices.length} invoices):</p>
+                  <div className="space-y-1">
+                    {(student?.invoices ?? [])
+                      .filter((i: { status: string }) => ['due', 'overdue', 'partial'].includes(i.status))
+                      .map((i: { id: string; invoiceNumber: string; description?: string; type: string; balance: number; status: string }) => (
+                        <div key={i.id} className="flex justify-between text-xs">
+                          <span className="text-orange-700">{i.invoiceNumber} — {i.description ?? i.type}</span>
+                          <span className="font-semibold text-orange-900">{formatCurrency(Number(i.balance))}</span>
+                        </div>
+                      ))}
+                    <div className="flex justify-between text-xs font-bold text-orange-900 border-t border-orange-200 pt-1 mt-1">
+                      <span>Total Due</span>
+                      <span>{formatCurrency(totalDue)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Invoice selector */}
               <div className="space-y-1.5">
-                <Label>Invoice</Label>
+                <Label>Select Invoice to Pay</Label>
                 <select value={payInvoiceId} onChange={e => {
                   setPayInvoiceId(e.target.value)
                   const inv = (student?.invoices ?? []).find((i: { id: string }) => i.id === e.target.value)
-                  if (inv) setPayAmount(String(Number(inv.balance)))
+                  if (inv) setPayAmount(String(Number((inv as { balance: number }).balance)))
                 }} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
                   <option value="">Select invoice...</option>
                   {(student?.invoices ?? [])
                     .filter((i: { status: string }) => ['due', 'overdue', 'partial'].includes(i.status))
                     .map((i: { id: string; invoiceNumber: string; description?: string; type: string; balance: number }) => (
                       <option key={i.id} value={i.id}>
-                        {i.invoiceNumber} — {i.description ?? i.type} (₹{Number(i.balance).toLocaleString('en-IN')})
+                        {i.invoiceNumber} — {i.description ?? i.type} (Rs.{Number(i.balance).toLocaleString('en-IN')})
                       </option>
                     ))}
                 </select>
+                {openInvoices.length > 1 && (
+                  <p className="text-xs text-gray-500">Pay invoices one at a time. Start with the oldest.</p>
+                )}
               </div>
 
               {/* Amount + late fee */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Amount (₹)</Label>
+                  <Label>Amount (Rs.)</Label>
                   <Input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Late Fee (₹) <span className="text-xs text-gray-400">optional</span></Label>
+                  <Label>Late Fee (Rs.) <span className="text-xs text-gray-400">optional</span></Label>
                   <Input type="number" value={payLateFee || ''} onChange={e => setPayLateFee(Number(e.target.value))} placeholder="0" />
                 </div>
               </div>
@@ -846,13 +877,10 @@ export default function StudentDetailPage() {
                 </p>
               )}
 
-              {/* Payment mode — cash only */}
-              <div className="space-y-1.5">
-                <Label>Payment Mode</Label>
-                <div className="p-3 rounded-xl border-2 border-primary bg-primary/5 text-center">
-                  <p className="text-sm font-semibold text-primary">💵 Cash</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Cash payment collected at counter</p>
-                </div>
+              {/* Cash only */}
+              <div className="p-3 rounded-xl border-2 border-primary bg-primary/5 text-center">
+                <p className="text-sm font-semibold text-primary">Cash Payment</p>
+                <p className="text-xs text-gray-500 mt-0.5">Recorded immediately. Receipt generated automatically.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
