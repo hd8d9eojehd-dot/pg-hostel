@@ -368,7 +368,7 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
     if (updateData.semester !== undefined) {
       const currentStudent = await prisma.student.findUnique({
         where: { id: req.params['id']! },
-        select: { semester: true, totalSemesters: true, updatedAt: true },
+        select: { semester: true, totalSemesters: true, updatedAt: true, createdAt: true },
       })
       if (!currentStudent) throw new ApiError(404, 'Student not found')
 
@@ -384,15 +384,27 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
         throw new ApiError(400, `Cannot advance beyond total semesters (${totalSems})`)
       }
 
-      // Min 3 months, max 7 months since last update
-      const lastUpdate = new Date(currentStudent.updatedAt)
+      // Min 3 months since ADMISSION (joiningDate / createdAt), not since last profile update
+      // This prevents changing sem on day 1, but allows it after 3 months of stay
+      const admissionDate = new Date(currentStudent.createdAt)
       const now = new Date()
-      const monthsSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24 * 30)
-      if (monthsSinceUpdate < 3) {
-        throw new ApiError(400, `Semester can only be changed after 3 months. Last changed ${Math.floor(monthsSinceUpdate * 30)} days ago.`)
-      }
-      if (monthsSinceUpdate > 7) {
-        // Allow but log — admin may be catching up
+      const monthsSinceAdmission = (now.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+
+      // Only enforce the 3-month rule if this is NOT the first sem advance (sem 1 → 2)
+      // For sem 1→2, check against admission date. For later advances, check against last sem change.
+      // We track last sem change via a dedicated field — fall back to updatedAt if not available
+      if (currentSem > 1) {
+        // For sem 2+ advances, check 3 months since last update
+        const lastUpdate = new Date(currentStudent.updatedAt)
+        const monthsSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+        if (monthsSinceUpdate < 3) {
+          throw new ApiError(400, `Semester can only be changed after 3 months. Last changed ${Math.floor(monthsSinceUpdate * 30)} days ago.`)
+        }
+      } else {
+        // For first advance (sem 1→2), check 3 months since admission
+        if (monthsSinceAdmission < 3) {
+          throw new ApiError(400, `Semester can only be advanced after 3 months of stay. Admitted ${Math.floor(monthsSinceAdmission * 30)} days ago.`)
+        }
       }
     }
 
@@ -472,6 +484,24 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
       invalidateCache('cache:dashboard:*'),
       invalidateCache(`cache:portal:*`),
     ]).catch(() => {})
+
+    // If semester was advanced, send WhatsApp notification to student
+    if (createInvoiceForNewSem && updateData.semester) {
+      const newSem = updateData.semester
+      const notifyStudent = await prisma.student.findUnique({
+        where: { id: req.params['id']! },
+        select: { id: true, name: true, studentId: true, mobile: true, parentMobile: true, room: { select: { branchId: true } } },
+      })
+      if (notifyStudent) {
+        const { sendWhatsAppMessage } = await import('../services/whatsapp.service')
+        const { env: envConfig } = await import('../config/env')
+        const msg = `📚 *Semester Updated — ${envConfig.PG_NAME}*\n\nDear *${notifyStudent.name}*,\n\nYour current semester has been updated to *Semester ${newSem}*.\n\nA new fee invoice has been generated and is now *due*. Please pay via the student portal.\n\n🔗 ${envConfig.STUDENT_PORTAL_URL}/finance\n\n_${envConfig.PG_NAME}_`
+        sendWhatsAppMessage({ mobile: notifyStudent.mobile, message: msg, studentId: notifyStudent.id, templateName: 'SEM_ADVANCE' }).catch(() => {})
+        if (notifyStudent.parentMobile && notifyStudent.parentMobile !== notifyStudent.mobile) {
+          sendWhatsAppMessage({ mobile: notifyStudent.parentMobile, message: msg, studentId: notifyStudent.id, templateName: 'SEM_ADVANCE_PARENT' }).catch(() => {})
+        }
+      }
+    }
 
     res.json({ success: true, message: 'Student updated', data: student })
   } catch (err) {

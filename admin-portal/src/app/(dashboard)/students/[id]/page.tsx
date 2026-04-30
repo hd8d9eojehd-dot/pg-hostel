@@ -34,6 +34,7 @@ function SemesterUpdateInline({
   onUpdated: () => void
 }) {
   const { toast } = useToast()
+  const qc = useQueryClient()
   const [pending, setPending] = useState(false)
 
   // Only allow advancing to next semester (currentSem + 1)
@@ -48,12 +49,24 @@ function SemesterUpdateInline({
         semester: nextSem,
         createInvoiceForNewSem: true,
       })
+      // Invalidate ALL related queries so the new invoice shows everywhere immediately
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['student', studentId] }),
+        qc.invalidateQueries({ queryKey: ['students'] }),
+        qc.invalidateQueries({ queryKey: ['invoices'] }),
+        qc.invalidateQueries({ queryKey: ['finance-summary'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      ])
       onUpdated()
-      toast({ title: `✓ Semester advanced to ${nextSem} · New invoice created (due)` })
+      toast({
+        title: `Semester advanced to ${nextSem}`,
+        description: `New invoice created — status: Due. Student can pay via portal or cash.`,
+      })
     } catch (e: unknown) {
+      const errMsg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
       toast({
         title: 'Failed to update semester',
-        description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error,
+        description: errMsg,
         variant: 'destructive',
       })
     } finally {
@@ -75,10 +88,10 @@ function SemesterUpdateInline({
           onClick={handleAdvance}
         >
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
-          Sem {nextSem}
+          Advance to Sem {nextSem}
         </Button>
       ) : (
-        <span className="text-xs text-gray-400 flex-shrink-0">Final sem</span>
+        <span className="text-xs text-gray-400 flex-shrink-0">Final sem reached</span>
       )}
     </div>
   )
@@ -468,27 +481,32 @@ export default function StudentDetailPage() {
                         {(() => {
                           const totalSems = (student as { totalSemesters?: number }).totalSemesters ?? 8
                           const currentSem = student.semester ?? 1
+                          // Correct fee per period based on package
                           const feePerSem = student.rentPackage === 'semester'
                             ? Number(student.room?.semesterRent ?? 0)
                             : student.rentPackage === 'monthly'
-                              ? Number(student.room?.monthlyRent ?? 0) * 6
-                              : Number(student.room?.annualRent ?? 0) / 2
+                              ? Number(student.room?.monthlyRent ?? 0)
+                              : Number(student.room?.annualRent ?? 0)
+
+                          const rentInvoices = (student.invoices ?? []).filter((i: { type: string }) => i.type === 'rent')
 
                           return Array.from({ length: totalSems }, (_, i) => i + 1).map(sem => {
                             const isCurrent = sem === currentSem
-                            // Find invoice for this semester — match by semesterNumber, description, or current sem
-                            const semInvoice = (student.invoices ?? []).find((inv: { description?: string; semesterNumber?: number; status: string; invoiceNumber: string }) =>
-                              inv.semesterNumber === sem ||
-                              inv.description?.toLowerCase().includes(`sem ${sem}`) ||
-                              (isCurrent && (student.invoices ?? []).filter((i: { type: string }) => i.type === 'rent').indexOf(inv) === sem - 1)
-                            ) ?? (student.invoices ?? []).filter((i: { type: string }) => i.type === 'rent')[sem - 1]
+                            const isPast = sem < currentSem
 
-                            // Determine status: use invoice status if exists, else position-based
+                            // Match invoice by semesterNumber first (most reliable), then by description
+                            const semInvoice = rentInvoices.find((inv: { semesterNumber?: number; description?: string }) =>
+                              inv.semesterNumber === sem ||
+                              inv.description?.toLowerCase().includes(`sem ${sem} `) ||
+                              inv.description?.toLowerCase().includes(`semester ${sem} `)
+                            )
+
+                            // Determine status
                             let semStatus: string
                             if (semInvoice) {
-                              semStatus = semInvoice.status // paid/partial/due/overdue
-                            } else if (sem < currentSem) {
-                              semStatus = 'no_record' // no invoice found — don't assume paid
+                              semStatus = (semInvoice as { status: string }).status
+                            } else if (isPast) {
+                              semStatus = 'no_record'
                             } else if (isCurrent) {
                               semStatus = 'due'
                             } else {
@@ -496,28 +514,34 @@ export default function StudentDetailPage() {
                             }
 
                             const statusConfig: Record<string, { label: string; cls: string }> = {
-                              paid: { label: '✓ Paid', cls: 'bg-green-100 text-green-700' },
-                              partial: { label: '◑ Partial', cls: 'bg-orange-100 text-orange-700' },
-                              due: { label: '⏳ Due', cls: 'bg-yellow-100 text-yellow-700' },
-                              overdue: { label: '⚠ Overdue', cls: 'bg-red-100 text-red-700' },
+                              paid: { label: 'Paid', cls: 'bg-green-100 text-green-700' },
+                              partial: { label: 'Partial', cls: 'bg-orange-100 text-orange-700' },
+                              due: { label: 'Due', cls: 'bg-yellow-100 text-yellow-700' },
+                              overdue: { label: 'Overdue', cls: 'bg-red-100 text-red-700' },
                               upcoming: { label: 'Upcoming', cls: 'bg-gray-100 text-gray-500' },
-                              no_record: { label: 'No Record', cls: 'bg-gray-100 text-gray-500' },
+                              no_record: { label: 'No Record', cls: 'bg-gray-100 text-gray-400' },
                             }
                             const sc = statusConfig[semStatus] ?? statusConfig['upcoming']
+                            const invTyped = semInvoice as { invoiceNumber?: string; balance?: number } | undefined
                             return (
-                              <tr key={sem} className={`border-b ${isCurrent ? 'bg-blue-50' : ''}`}>
+                              <tr key={sem} className={`border-b ${isCurrent ? 'bg-blue-50' : isPast && !semInvoice ? 'opacity-60' : ''}`}>
                                 <td className="px-3 py-2">
                                   Sem {sem}
                                   {isCurrent && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Current</span>}
                                 </td>
-                                <td className="px-3 py-2 text-right font-medium">{formatCurrency(feePerSem)}</td>
+                                <td className="px-3 py-2 text-right font-medium">
+                                  {isPast && !semInvoice ? <span className="text-gray-300">—</span> : formatCurrency(feePerSem)}
+                                </td>
                                 <td className="px-3 py-2">
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.cls}`}>
                                     {sc.label}
                                   </span>
+                                  {invTyped?.balance !== undefined && Number(invTyped.balance) > 0 && (
+                                    <span className="ml-1.5 text-xs text-red-600">({formatCurrency(Number(invTyped.balance))} due)</span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 hidden md:table-cell text-xs text-gray-400 font-mono">
-                                  {semInvoice ? semInvoice.invoiceNumber : '—'}
+                                  {invTyped?.invoiceNumber ?? '—'}
                                 </td>
                               </tr>
                             )
@@ -526,20 +550,25 @@ export default function StudentDetailPage() {
                       </tbody>
                       <tfoot>
                         <tr className="bg-gray-50 font-semibold border-t-2">
-                          <td className="px-3 py-2">Total Course</td>
+                          <td className="px-3 py-2">Fee from Sem {student.semester ?? 1}</td>
                           <td className="px-3 py-2 text-right text-blue-700">
-                            {formatCurrency(((student as { totalSemesters?: number }).totalSemesters ?? 8) * (student.rentPackage === 'semester'
-                              ? Number(student.room?.semesterRent ?? 0)
-                              : student.rentPackage === 'monthly'
-                                ? Number(student.room?.monthlyRent ?? 0) * 6
-                                : Number(student.room?.annualRent ?? 0) / 2))}
+                            {formatCurrency(
+                              Math.max(0, ((student as { totalSemesters?: number }).totalSemesters ?? 8) - (student.semester ?? 1) + 1) *
+                              (student.rentPackage === 'semester'
+                                ? Number(student.room?.semesterRent ?? 0)
+                                : student.rentPackage === 'monthly'
+                                  ? Number(student.room?.monthlyRent ?? 0)
+                                  : Number(student.room?.annualRent ?? 0))
+                            )}
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-500" colSpan={2}>{(student as { totalSemesters?: number }).totalSemesters ?? 8} semesters</td>
+                          <td className="px-3 py-2 text-xs text-gray-500" colSpan={2}>
+                            {Math.max(0, ((student as { totalSemesters?: number }).totalSemesters ?? 8) - (student.semester ?? 1) + 1)} sems remaining
+                          </td>
                         </tr>
                         <tr className="bg-green-50">
                           <td className="px-3 py-2 text-green-700">Deposit</td>
                           <td className="px-3 py-2 text-right text-green-700">{formatCurrency(Number(student.depositAmount))}</td>
-                          <td className="px-3 py-2 text-xs text-green-600" colSpan={2}>Refundable</td>
+                          <td className="px-3 py-2 text-xs text-green-600" colSpan={2}>Refundable on exit</td>
                         </tr>
                       </tfoot>
                     </table>
