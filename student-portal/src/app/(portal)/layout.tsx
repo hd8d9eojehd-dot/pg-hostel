@@ -9,7 +9,6 @@ import api from '@/lib/api'
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user, _hasHydrated, clearAuth } = useAuthStore()
   const router = useRouter()
-  const pathname = usePathname()
   // Track if we already redirected to avoid loops
   const redirectedRef = useRef(false)
 
@@ -43,6 +42,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     if (user && !user.isFirstLogin) {
       redirectedRef.current = false
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.isFirstLogin])
 
   // Wait for localStorage rehydration
