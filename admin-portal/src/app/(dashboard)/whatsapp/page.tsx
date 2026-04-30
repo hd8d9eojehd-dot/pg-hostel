@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
-import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Send, Wifi, WifiOff, RefreshCw, Users, MessageSquare, FileText, Save, Loader2, QrCode, LogOut, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 
 type WaStatus = {
@@ -37,19 +37,31 @@ export default function WhatsAppPage() {
   const [templates, setTemplates] = useState<Record<string, string>>({})
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
 
-  // Poll status — fast when not connected, slow when connected
+  // Poll status — fast when waiting for QR, slow when connected
   const { data: status, refetch: refetchStatus } = useQuery<WaStatus>({
     queryKey: ['wa-status'],
     queryFn: () => api.get('/whatsapp/status').then(r => r.data.data),
     refetchInterval: (query) => {
       const d = query.state.data as WaStatus | undefined
-      if (d?.ready) return 30000          // connected — check every 30s
-      if (d?.initializing) return 2000    // starting up — check every 2s
-      if (d?.qrAvailable) return 5000     // QR shown — check every 5s for scan
-      return 5000                          // disconnected — check every 5s
+      if (d?.ready) return 30000       // connected — slow poll
+      if (d?.qrAvailable) return 4000  // QR shown — poll to detect scan
+      return 2000                       // waiting for QR — fast poll
     },
     staleTime: 0,
   })
+
+  // Auto-trigger reconnect on first load if not connected and not initializing
+  // This ensures QR appears automatically without clicking any button
+  const [autoStarted, setAutoStarted] = useState(false)
+  useEffect(() => {
+    if (!autoStarted && status !== undefined && !status.ready && !status.initializing && !status.qrAvailable) {
+      setAutoStarted(true)
+      api.post('/whatsapp/reconnect').catch(() => {})
+      // Poll aggressively after auto-start
+      const polls = [2000, 4000, 6000, 8000, 12000, 18000, 25000]
+      polls.forEach(ms => setTimeout(() => refetchStatus(), ms))
+    }
+  }, [status, autoStarted, refetchStatus])
 
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ['wa-logs', page, logsStatusFilter, logsStartDate, logsEndDate],
@@ -102,31 +114,20 @@ export default function WhatsAppPage() {
   const forceLogout = useMutation({
     mutationFn: () => api.post('/whatsapp/logout'),
     onSuccess: () => {
-      toast({ title: 'WhatsApp disconnected', description: 'Click Connect to scan QR and reconnect.' })
+      toast({ title: 'WhatsApp disconnected' })
+      setAutoStarted(false) // allow auto-start again after logout
       qc.invalidateQueries({ queryKey: ['wa-status'] })
-      refetchStatus()
+      setTimeout(() => refetchStatus(), 500)
     },
     onError: (e: unknown) => toast({ title: 'Logout failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
   })
 
-  // Connect / Reconnect — generates a fresh QR
-  const connectWa = useMutation({
-    mutationFn: () => api.post('/whatsapp/reconnect'),
-    onSuccess: () => {
-      toast({ title: 'Starting WhatsApp...', description: 'QR code will appear in a few seconds.' })
-      // Poll aggressively after connect to catch QR quickly
-      const polls = [2000, 4000, 6000, 8000, 12000, 18000]
-      polls.forEach(ms => setTimeout(() => refetchStatus(), ms))
-    },
-    onError: (e: unknown) => toast({ title: 'Connect failed', description: (e as { response?: { data?: { error?: string } } })?.response?.data?.error, variant: 'destructive' }),
-  })
-
-  // Manual QR refresh — only when user clicks the button
+  // Manual QR refresh
   const refreshQr = useMutation({
     mutationFn: () => api.post('/whatsapp/reconnect'),
     onSuccess: () => {
-      toast({ title: 'Generating new QR...', description: 'New QR will appear in a few seconds.' })
-      const polls = [2000, 4000, 6000, 8000]
+      toast({ title: 'Generating new QR...' })
+      const polls = [2000, 4000, 6000, 8000, 12000]
       polls.forEach(ms => setTimeout(() => refetchStatus(), ms))
     },
     onError: () => toast({ title: 'Failed to refresh QR', variant: 'destructive' }),
@@ -137,136 +138,136 @@ export default function WhatsAppPage() {
   const statusBadge = (s: string) => ({ sent: 'bg-green-100 text-green-800', delivered: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800', queued: 'bg-yellow-100 text-yellow-800' }[s] ?? 'bg-gray-100 text-gray-600')
   const DEFAULT_TEMPLATE_KEYS = ['admission', 'payment_reminder', 'payment_received', 'fee_due', 'notice']
 
+  const isWaiting = !status?.ready && !status?.qrAvailable
+
   return (
     <div>
       <Header title="WhatsApp" />
       <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
 
-        {/* ── CONNECTION CARD ── */}
-        <Card className={status?.ready ? 'border-green-200 bg-green-50' : 'border-gray-200'}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                {status?.ready
-                  ? <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center"><Wifi className="w-5 h-5 text-green-600" /></div>
-                  : <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center"><WifiOff className="w-5 h-5 text-gray-400" /></div>
-                }
-                <div>
-                  <p className={`font-semibold text-base ${status?.ready ? 'text-green-800' : 'text-gray-700'}`}>
-                    {status?.ready ? 'WhatsApp Connected' : status?.initializing ? 'Starting...' : status?.qrAvailable ? 'Scan QR to Connect' : 'Not Connected'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {status?.ready
-                      ? 'All notifications will be delivered via WhatsApp'
-                      : status?.qrAvailable
-                        ? 'Open WhatsApp on your phone and scan the QR below'
-                        : 'Click Connect to link your WhatsApp account'}
-                  </p>
+        {/* ── MAIN CONNECTION CARD ── */}
+        {status?.ready ? (
+          /* ── CONNECTED STATE ── */
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-green-800 text-base">WhatsApp Connected</p>
+                    <p className="text-sm text-green-600 mt-0.5">All notifications will be delivered automatically</p>
+                  </div>
                 </div>
+                <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => { if (confirm('Force disconnect WhatsApp? You will need to scan QR again.')) forceLogout.mutate() }}
+                  disabled={forceLogout.isPending}>
+                  {forceLogout.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                  Force Logout
+                </Button>
               </div>
-
-              <div className="flex items-center gap-2">
+            </CardContent>
+          </Card>
+        ) : (
+          /* ── NOT CONNECTED — SHOW QR PERMANENTLY ── */
+          <Card className="border-orange-200">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center">
+                    <WifiOff className="w-6 h-6 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-800 text-base">WhatsApp Not Connected</p>
+                    <p className="text-sm text-gray-500 mt-0.5">Scan the QR code below to connect</p>
+                  </div>
+                </div>
                 <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500" onClick={() => refetchStatus()}>
                   <RefreshCw className="w-3.5 h-3.5" /> Refresh
                 </Button>
-                {status?.ready ? (
-                  <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
-                    onClick={() => { if (confirm('Force disconnect WhatsApp? You will need to scan QR again to reconnect.')) forceLogout.mutate() }}
-                    disabled={forceLogout.isPending}>
-                    {forceLogout.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-                    Force Logout
-                  </Button>
-                ) : (
-                  <Button size="sm" className="gap-1.5"
-                    onClick={() => connectWa.mutate()}
-                    disabled={connectWa.isPending || status?.initializing}>
-                    {(connectWa.isPending || status?.initializing)
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting...</>
-                      : <><RotateCcw className="w-3.5 h-3.5" /> Connect WhatsApp</>}
-                  </Button>
-                )}
               </div>
-            </div>
 
-            {/* QR Code — shown when available, stable until scanned */}
-            {!status?.ready && status?.qrAvailable && (
-              <div className="border border-gray-200 rounded-2xl p-6 bg-white">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                  {/* QR Image */}
-                  <div className="flex-shrink-0">
-                    {status.qrDataUrl ? (
-                      <div className="relative">
-                        <img
-                          src={status.qrDataUrl}
-                          alt="WhatsApp QR Code"
-                          className={`w-52 h-52 rounded-xl border-2 border-gray-200 ${status.qrExpired ? 'opacity-30 blur-sm' : ''}`}
-                        />
-                        {status.qrExpired && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                            <AlertTriangle className="w-8 h-8 text-orange-500" />
-                            <p className="text-sm font-semibold text-orange-700">QR Expired</p>
-                            <Button size="sm" variant="outline" className="gap-1.5 bg-white"
-                              onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
-                              {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                              Get New QR
-                            </Button>
-                          </div>
-                        )}
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                {/* QR Code area */}
+                <div className="flex-shrink-0 flex flex-col items-center gap-3">
+                  {isWaiting ? (
+                    /* Generating QR */
+                    <div className="w-56 h-56 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-gray-600">Generating QR Code...</p>
+                        <p className="text-xs text-gray-400 mt-1">Takes 5-15 seconds</p>
                       </div>
-                    ) : (
-                      <div className="w-52 h-52 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-                        <p className="text-xs text-gray-400">Generating QR...</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Instructions */}
-                  <div className="flex-1 space-y-3">
-                    <p className="font-semibold text-gray-800">How to connect:</p>
-                    <ol className="space-y-2 text-sm text-gray-600">
-                      <li className="flex items-start gap-2">
-                        <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span>
-                        Open <strong>WhatsApp</strong> on your phone
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span>
-                        Tap <strong>Menu (3 dots) → Linked Devices → Link a Device</strong>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span>
-                        Point your camera at the QR code
-                      </li>
-                    </ol>
-                    <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
-                      <p className="font-semibold mb-1">QR stays stable until scanned.</p>
-                      <p>If it expires before you scan, click <strong>Get New QR</strong>.</p>
-                      <p className="mt-1">Once connected, WhatsApp stays logged in until you click <strong>Force Logout</strong>.</p>
                     </div>
-                    {!status.qrExpired && (
-                      <Button variant="outline" size="sm" className="gap-1.5 text-gray-500"
-                        onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
-                        {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        Refresh QR manually
-                      </Button>
-                    )}
+                  ) : status?.qrDataUrl ? (
+                    /* QR ready — show it */
+                    <div className="relative">
+                      <img
+                        src={status.qrDataUrl}
+                        alt="WhatsApp QR Code"
+                        className={`w-56 h-56 rounded-2xl border-2 border-gray-200 shadow-sm ${status.qrExpired ? 'opacity-25 blur-sm' : ''}`}
+                      />
+                      {status.qrExpired && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-white/80">
+                          <AlertTriangle className="w-8 h-8 text-orange-500" />
+                          <p className="text-sm font-bold text-orange-700">QR Expired</p>
+                          <Button size="sm" className="gap-1.5 mt-1"
+                            onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
+                            {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                            Get New QR
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* QR available but no data URL yet */
+                    <div className="w-56 h-56 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3">
+                      <QrCode className="w-10 h-10 text-gray-300" />
+                      <p className="text-xs text-gray-400">Loading QR...</p>
+                    </div>
+                  )}
+
+                  {/* Manual refresh button — only when QR is showing and not expired */}
+                  {status?.qrAvailable && !status.qrExpired && (
+                    <Button variant="outline" size="sm" className="gap-1.5 text-gray-500 w-full"
+                      onClick={() => refreshQr.mutate()} disabled={refreshQr.isPending}>
+                      {refreshQr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Refresh QR
+                    </Button>
+                  )}
+                </div>
+
+                {/* Instructions */}
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <p className="font-semibold text-gray-800 mb-3">How to connect:</p>
+                    <ol className="space-y-3">
+                      {[
+                        { n: 1, text: 'Open WhatsApp on your phone' },
+                        { n: 2, text: 'Tap Menu (⋮) → Linked Devices → Link a Device' },
+                        { n: 3, text: 'Point your camera at the QR code on the left' },
+                      ].map(({ n, text }) => (
+                        <li key={n} className="flex items-start gap-3">
+                          <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{n}</span>
+                          <span className="text-sm text-gray-600">{text}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-1.5 text-xs text-blue-700">
+                    <p className="font-semibold">Important:</p>
+                    <p>• QR stays visible until you scan it</p>
+                    <p>• Once connected, WhatsApp stays logged in permanently</p>
+                    <p>• Only "Force Logout" will disconnect it</p>
+                    <p>• If QR expires before scanning, click "Refresh QR"</p>
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Initializing state */}
-            {!status?.ready && !status?.qrAvailable && (status?.initializing || connectWa.isPending) && (
-              <div className="border border-blue-200 rounded-2xl p-6 bg-blue-50 flex items-center gap-4">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin flex-shrink-0" />
-                <div>
-                  <p className="font-semibold text-blue-800">Starting WhatsApp...</p>
-                  <p className="text-sm text-blue-600 mt-0.5">This takes 5-15 seconds. QR will appear automatically.</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── MESSAGING TABS ── */}
         <Tabs defaultValue="single">
@@ -285,8 +286,9 @@ export default function WhatsAppPage() {
               <CardHeader><CardTitle className="text-base">Send to Single Number</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {!status?.ready && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800">
-                    WhatsApp is not connected. Connect first to send messages.
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    Connect WhatsApp first by scanning the QR code above.
                   </div>
                 )}
                 <div className="space-y-1.5">
@@ -317,8 +319,9 @@ export default function WhatsAppPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {!status?.ready && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800">
-                    WhatsApp is not connected. Connect first to send messages.
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-800 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    Connect WhatsApp first by scanning the QR code above.
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-xl">
