@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { sendWhatsAppMessage, sendBulkWhatsApp } from '../services/whatsapp.service'
-import { isWhatsAppReady, getQrCode } from '../config/whatsapp'
+import { isWhatsAppReady, getQrCode, getQrDataUrl, isQrExpired, isWhatsAppInitializing } from '../config/whatsapp'
 import { prisma } from '../config/prisma'
 import { getPaginationParams, getPaginationMeta, getSkip } from '../utils/pagination'
 
@@ -23,7 +23,6 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 
     let finalMessages = messages ?? []
 
-    // If filter provided, build messages from filtered students
     if (filter && filter.message) {
       const where: Record<string, unknown> = {}
       if (filter.status) where['status'] = filter.status
@@ -58,26 +57,16 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 }
 
 export async function getWhatsAppStatus(_req: Request, res: Response): Promise<void> {
-  const qr = getQrCode()
-  // Also generate QR data URL inline so frontend doesn't need a separate /qr-image call
-  let qrDataUrl: string | null = null
-  if (qr) {
-    try {
-      const QRCode = await import('qrcode')
-      qrDataUrl = await QRCode.toDataURL(qr, {
-        width: 280, margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-        errorCorrectionLevel: 'M',
-      })
-    } catch { /* non-fatal */ }
-  }
+  const qrDataUrl = getQrDataUrl()
+  const qrString = getQrCode()
   res.json({
     success: true,
     data: {
       ready: isWhatsAppReady(),
-      qrAvailable: !!qr,
-      qr: qr ?? null,
-      qrDataUrl: qrDataUrl ?? null, // inline data URL — use directly in <img>
+      initializing: isWhatsAppInitializing(),
+      qrAvailable: !!qrString,
+      qrExpired: isQrExpired(),
+      qrDataUrl: qrDataUrl ?? null, // stable PNG — only changes when manually refreshed
     },
   })
 }
