@@ -171,8 +171,9 @@ export async function downloadReceipt(req: Request, res: Response, next: NextFun
         pgContact,
         signatureUrl,
       })
+      const inline = req.query['inline'] === '1'
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="receipt-${payment.receiptNumber}.pdf"`)
+      res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="receipt-${payment.receiptNumber}.pdf"`)
       res.send(pdf)
     } catch (pdfErr) {
       // Fallback: return HTML receipt if PDF generation fails

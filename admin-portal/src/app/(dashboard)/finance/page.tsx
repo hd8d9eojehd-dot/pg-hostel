@@ -283,7 +283,7 @@ export default function FinancePage() {
                                 </Link>
                               )}
                               {inv.status === 'paid' && inv.payments?.[0] && (
-                                <a href={`${API_URL}/finance/receipts/${inv.payments[0].receiptNumber}`}
+                                <a href={`${API_URL}/finance/receipts/${inv.payments[0].receiptNumber}?inline=1`}
                                   target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                                   className="text-xs text-primary hover:underline flex items-center gap-0.5">
                                   <Download className="w-3 h-3" /> Receipt

@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
@@ -378,7 +377,7 @@ export default function FinancePage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-green-700">{formatCurrency(p.amount)}</span>
-                                  <a href={`${API_URL}/finance/receipts/${p.receiptNumber}`} target="_blank" rel="noopener noreferrer"
+                                  <a href={`${API_URL}/finance/receipts/${p.receiptNumber}?inline=1`} target="_blank" rel="noopener noreferrer"
                                     className="text-primary hover:underline flex items-center gap-0.5">
                                     <Download className="w-3 h-3" />
                                   </a>
@@ -420,7 +419,7 @@ export default function FinancePage() {
                             </Button>
                           )}
                           {inv.status === 'paid' && inv.payments[0] && (
-                            <a href={`${API_URL}/finance/receipts/${inv.payments[0].receiptNumber}`} target="_blank" rel="noopener noreferrer"
+                            <a href={`${API_URL}/finance/receipts/${inv.payments[0].receiptNumber}?inline=1`} target="_blank" rel="noopener noreferrer"
                               className="text-xs text-primary flex items-center gap-1 hover:underline flex-shrink-0">
                               <Download className="w-3 h-3" /> Receipt
                             </a>
@@ -671,7 +670,7 @@ export default function FinancePage() {
                             </div>
                             <div className="text-right flex-shrink-0">
                               <p className="text-sm font-bold text-green-700">{formatCurrency(p.amount)}</p>
-                              <a href={`${API_URL}/finance/receipts/${p.receiptNumber}`} target="_blank" rel="noopener noreferrer"
+                              <a href={`${API_URL}/finance/receipts/${p.receiptNumber}?inline=1`} target="_blank" rel="noopener noreferrer"
                                 className="text-xs text-primary flex items-center gap-1 justify-end mt-0.5 hover:underline">
                                 <Download className="w-3 h-3" /> Receipt
                               </a>
@@ -701,7 +700,7 @@ export default function FinancePage() {
                             </div>
                             <div className="text-right flex-shrink-0">
                               <p className="text-sm font-bold text-green-700">{formatCurrency(p.amount)}</p>
-                              <a href={`${API_URL}/finance/receipts/${p.receiptNumber}`} target="_blank" rel="noopener noreferrer"
+                              <a href={`${API_URL}/finance/receipts/${p.receiptNumber}?inline=1`} target="_blank" rel="noopener noreferrer"
                                 className="text-xs text-primary flex items-center gap-1 justify-end mt-0.5 hover:underline">
                                 <Download className="w-3 h-3" /> Receipt
                               </a>

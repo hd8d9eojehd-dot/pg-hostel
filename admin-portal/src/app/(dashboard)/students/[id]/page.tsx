@@ -35,20 +35,21 @@ function SemesterUpdateInline({
 }) {
   const { toast } = useToast()
   const [pending, setPending] = useState(false)
-  const [selected, setSelected] = useState(currentSem)
 
-  const handleChange = async (newSem: number) => {
-    if (newSem === currentSem) return
+  // Only allow advancing to next semester (currentSem + 1)
+  const nextSem = currentSem + 1
+  const canAdvance = nextSem <= totalSems
+
+  const handleAdvance = async () => {
+    if (!canAdvance) return
     setPending(true)
     try {
-      // Update semester AND create new invoice for the new semester
       await api.patch(`/students/${studentId}`, {
-        semester: newSem,
-        createInvoiceForNewSem: true, // backend flag to auto-create invoice
+        semester: nextSem,
+        createInvoiceForNewSem: true,
       })
-      setSelected(newSem)
       onUpdated()
-      toast({ title: `✓ Semester updated to ${newSem} · New invoice created (due)` })
+      toast({ title: `✓ Semester advanced to ${nextSem} · New invoice created (due)` })
     } catch (e: unknown) {
       toast({
         title: 'Failed to update semester',
@@ -62,18 +63,23 @@ function SemesterUpdateInline({
 
   return (
     <div className="flex items-center gap-2">
-      <select
-        value={selected}
-        disabled={pending}
-        onChange={e => handleChange(Number(e.target.value))}
-        className="h-8 rounded-lg border border-input bg-background px-2 text-xs flex-1 disabled:opacity-50"
-      >
-        {Array.from({ length: totalSems }, (_, i) => i + 1).map(s => (
-          <option key={s} value={s}>Sem {s}</option>
-        ))}
-      </select>
-      <span className="text-xs text-gray-400 flex-shrink-0">of {totalSems}</span>
-      {pending && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary flex-shrink-0" />}
+      <div className="flex-1 h-8 rounded-lg border border-input bg-gray-50 px-3 flex items-center text-xs text-gray-600">
+        Current: Sem {currentSem} of {totalSems}
+      </div>
+      {canAdvance ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 px-3 text-xs gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+          disabled={pending}
+          onClick={handleAdvance}
+        >
+          {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
+          Sem {nextSem}
+        </Button>
+      ) : (
+        <span className="text-xs text-gray-400 flex-shrink-0">Final sem</span>
+      )}
     </div>
   )
 }
@@ -766,7 +772,7 @@ export default function StudentDetailPage() {
                 <p className="text-gray-500 text-sm">Amount: <span className="font-bold text-green-700">{formatCurrency(paySuccess.amount)}</span></p>
               </div>
               <div className="flex gap-2">
-                <a href={`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api/v1'}/finance/receipts/${paySuccess.receiptNumber}`}
+                <a href={`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/api/v1'}/finance/receipts/${paySuccess.receiptNumber}?inline=1`}
                   target="_blank" rel="noopener noreferrer" className="flex-1">
                   <Button variant="outline" className="w-full gap-2"><Download className="w-4 h-4" /> Receipt</Button>
                 </a>

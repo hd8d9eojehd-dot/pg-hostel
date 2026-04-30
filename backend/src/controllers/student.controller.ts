@@ -343,6 +343,39 @@ export async function getStudentById(req: Request, res: Response, next: NextFunc
 export async function updateStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { createInvoiceForNewSem, ...updateData } = req.body as UpdateStudentInput & { createInvoiceForNewSem?: boolean }
+
+    // ── Semester change validation ──────────────────────────────────────────
+    if (updateData.semester !== undefined) {
+      const currentStudent = await prisma.student.findUnique({
+        where: { id: req.params['id']! },
+        select: { semester: true, totalSemesters: true, updatedAt: true },
+      })
+      if (!currentStudent) throw new ApiError(404, 'Student not found')
+
+      const currentSem = currentStudent.semester ?? 1
+      const newSem = updateData.semester
+      const totalSems = (currentStudent as { totalSemesters?: number }).totalSemesters ?? 8
+
+      // Only allow 1 semester forward
+      if (newSem !== currentSem + 1) {
+        throw new ApiError(400, `Semester can only advance by 1 at a time (${currentSem} → ${currentSem + 1}). Cannot set to ${newSem}.`)
+      }
+      if (newSem > totalSems) {
+        throw new ApiError(400, `Cannot advance beyond total semesters (${totalSems})`)
+      }
+
+      // Min 3 months, max 7 months since last update
+      const lastUpdate = new Date(currentStudent.updatedAt)
+      const now = new Date()
+      const monthsSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+      if (monthsSinceUpdate < 3) {
+        throw new ApiError(400, `Semester can only be changed after 3 months. Last changed ${Math.floor(monthsSinceUpdate * 30)} days ago.`)
+      }
+      if (monthsSinceUpdate > 7) {
+        // Allow but log — admin may be catching up
+      }
+    }
+
     const student = await studentService.updateStudent(req.params['id']!, updateData as UpdateStudentInput)
 
     // If semester changed and createInvoiceForNewSem flag is set, create a new invoice
@@ -567,6 +600,11 @@ export async function bulkAdvanceSemester(req: Request, res: Response, next: Nex
 
     if (!course || !newSem || newSem <= currentSem) {
       throw new ApiError(400, 'course, currentSem, and newSem (> currentSem) are required')
+    }
+
+    // Only allow 1 semester forward at a time
+    if (newSem !== currentSem + 1) {
+      throw new ApiError(400, `Bulk advance only allows 1 semester at a time (${currentSem} → ${currentSem + 1}). Cannot set to ${newSem}.`)
     }
 
     // Find all active students in this course+branch at currentSem
