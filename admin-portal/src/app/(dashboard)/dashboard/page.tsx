@@ -2,28 +2,23 @@
 import { useQuery } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency, formatDate, formatDateTime, statusColor } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import api from '@/lib/api'
 import Link from 'next/link'
 import { Users, BedDouble, AlertTriangle, MessageSquare, DoorOpen, Clock, TrendingUp, IndianRupee, Activity, RefreshCw } from 'lucide-react'
-// PERF FIX: Lazy-load recharts â€” it's 200KB+ and only needed for the charts section
-import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
+// PERF FIX: Lazy-load the entire charts section — recharts is 200KB+ and below the fold
+import dynamic from 'next/dynamic'
 
-// PERF FIX: Lazy load chart components â€” they're heavy and below the fold
-const BarChart = dynamic(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false })
-const Bar = dynamic(() => import('recharts').then(m => ({ default: m.Bar })), { ssr: false })
-const XAxis = dynamic(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false })
-const YAxis = dynamic(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false })
-const CartesianGrid = dynamic(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false })
-const Tooltip = dynamic(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false })
-const ResponsiveContainer = dynamic(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false })
-const PieChart = dynamic(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false })
-const Pie = dynamic(() => import('recharts').then(m => ({ default: m.Pie })), { ssr: false })
-const Cell = dynamic(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false })
-const Legend = dynamic(() => import('recharts').then(m => ({ default: m.Legend })), { ssr: false })
-
-const PIE_COLORS: Record<string, string> = { available: '#22c55e', occupied: '#ef4444', partial: '#f59e0b', maintenance: '#f97316', blocked: '#6b7280' }
+const DashboardCharts = dynamic(() => import('@/components/dashboard/charts'), {
+  ssr: false,
+  loading: () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="lg:col-span-2 h-64 bg-gray-100 rounded-xl animate-pulse" />
+      <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+    </div>
+  ),
+})
 
 export default function DashboardPage() {
   const { data, isLoading, refetch, dataUpdatedAt } = useQuery({
@@ -59,8 +54,6 @@ export default function DashboardPage() {
     { label: 'Expiring Stays', value: stats.expiringStays ?? 0, sub: 'Within 7 days', icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50', href: '/reports' },
   ]
 
-  const pieData = (occupancy ?? []).map((o: { status: string; _count: number }) => ({ name: o.status, value: o._count }))
-
   return (
     <div>
       <Header title="Dashboard" />
@@ -81,6 +74,7 @@ export default function DashboardPage() {
           </Button>
         </div>
 
+        {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
           {statCards.map(({ label, value, sub, icon: Icon, color, bg, href }) => (
             <Link key={label} href={href} prefetch={true}>
@@ -98,47 +92,11 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp className="w-4 h-4 text-primary" /> Monthly Revenue
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data?.monthlyRevenue ?? []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `Rs.${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v: number) => [formatCurrency(v), 'Revenue']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                    <Bar dataKey="amount" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><BedDouble className="w-4 h-4 text-primary" /> Room Status</CardTitle></CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
-                      {pieData.map((entry: { name: string }, i: number) => (
-                        <Cell key={i} fill={PIE_COLORS[entry.name] ?? '#94a3b8'} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* PERF FIX: Charts lazy-loaded in separate component */}
+        <DashboardCharts
+          monthlyRevenue={data?.monthlyRevenue ?? []}
+          occupancy={occupancy ?? []}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <Card>
