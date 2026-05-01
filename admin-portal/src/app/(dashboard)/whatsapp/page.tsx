@@ -18,8 +18,7 @@ type WaStatus = {
   initializing: boolean
   qrAvailable: boolean
   qrDataUrl: string | null
-  savedAt: string | null
-  runtimeQrAvailable: boolean
+  qrSavedAt: string | null
 }
 
 export default function WhatsAppPage() {

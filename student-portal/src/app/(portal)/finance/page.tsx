@@ -556,9 +556,13 @@ export default function FinancePage() {
                               {paymentDetails && (paymentDetails.upiId || paymentDetails.upiQrUrl || paymentDetails.bankAccountNumber) ? (
                                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
                                   <p className="text-xs font-semibold text-blue-800">Transfer to:</p>
-                                  {paymentDetails.upiQrUrl && (
+                                  {paymentDetails.upiId && (
                                     <div className="flex justify-center">
-                                      <img src={paymentDetails.upiQrUrl} alt="UPI QR" className="w-32 h-32 rounded-lg border" />
+                                      <img
+                                        src={paymentDetails.upiQrUrl || `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${paymentDetails.upiId.trim()}`)}`}
+                                        alt="UPI QR"
+                                        className="w-36 h-36 rounded-lg border bg-white p-1"
+                                      />
                                     </div>
                                   )}
                                   {paymentDetails.upiId && (

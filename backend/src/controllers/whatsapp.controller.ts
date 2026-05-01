@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { sendWhatsAppMessage, sendBulkWhatsApp } from '../services/whatsapp.service'
-import { isWhatsAppReady, getQrCode, isWhatsAppInitializing } from '../config/whatsapp'
+import { isWhatsAppReady, getQrCode, getQrDataUrl, isWhatsAppInitializing } from '../config/whatsapp'
 import { prisma } from '../config/prisma'
 import { getPaginationParams, getPaginationMeta, getSkip } from '../utils/pagination'
 
@@ -73,24 +73,36 @@ export async function sendBulk(req: Request, res: Response, next: NextFunction):
 }
 
 export async function getWhatsAppStatus(_req: Request, res: Response): Promise<void> {
-  const ready = isWhatsAppReady()
-  // If connected, no need to show QR
-  if (ready) {
-    res.json({ success: true, data: { ready: true, initializing: false, qrAvailable: false, qrDataUrl: null, savedAt: null } })
-    return
-  }
-  // Read QR from DB — persistent, instant, no Puppeteer wait
-  const { qrDataUrl, savedAt } = await getStoredQr()
+  // Check in-memory state first (fastest)
+  const inMemoryReady = isWhatsAppReady()
+
+  // Read from DB — persistent, works even when backend restarts
+  let dbQrDataUrl: string | null = null
+  let dbConnected = false
+  let dbQrAt: string | null = null
+  try {
+    const branch = await prisma.branch.findFirst({ select: { id: true } })
+    if (branch) {
+      const settings = await prisma.settings.findUnique({ where: { branchId: branch.id }, select: { staffPermissions: true } })
+      const perms = (settings?.staffPermissions as Record<string, unknown>) ?? {}
+      dbConnected = perms['whatsappConnected'] === true
+      dbQrDataUrl = (perms['whatsappQr'] as string | null) ?? null
+      dbQrAt = (perms['whatsappQrAt'] as string | null) ?? null
+    }
+  } catch { /* non-fatal */ }
+
+  const ready = inMemoryReady || dbConnected
+  // Use in-memory QR if available (just generated), otherwise use DB QR
+  const finalQrDataUrl = getQrDataUrl() ?? dbQrDataUrl
+
   res.json({
     success: true,
     data: {
-      ready: false,
+      ready,
       initializing: isWhatsAppInitializing(),
-      qrAvailable: !!qrDataUrl,
-      qrDataUrl,
-      savedAt,
-      // Also check if runtime QR is available (just generated, not yet saved)
-      runtimeQrAvailable: !!getQrCode(),
+      qrAvailable: !!finalQrDataUrl && !ready,
+      qrDataUrl: ready ? null : (finalQrDataUrl ?? null),
+      qrSavedAt: dbQrAt,
     },
   })
 }
