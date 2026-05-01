@@ -306,11 +306,6 @@ export default function StudentDetailPage() {
                 <IndianRupee className="w-3.5 h-3.5" /> Collect Cash ({openInvoices.length} due)
               </Button>
             )}
-            {student.status === 'vacated' && (
-              <Button variant="outline" size="sm" className="gap-1.5 text-green-600 border-green-300 hover:bg-green-50" onClick={() => setRenewOpen(true)}>
-                <CheckCircle2 className="w-3.5 h-3.5" /> Re-admit
-              </Button>
-            )}
             {student.status !== 'vacated' && (
               <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setVacateOpen(true)}>
                 <UserX className="w-3.5 h-3.5" /> Vacate Student
@@ -686,45 +681,44 @@ export default function StudentDetailPage() {
         </Tabs>
       </div>
 
-      {/* Vacate Dialog — permanent action, frees room, blocks login */}
+      {/* Vacate Dialog — PERMANENT: deletes all student data */}
       <Dialog open={vacateOpen} onOpenChange={setVacateOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <UserX className="w-5 h-5" /> Vacate Student
+              <UserX className="w-5 h-5" /> Vacate Student — Permanent Action
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-              ⚠️ Vacating <strong>{student.name}</strong> will free their room/bed and block their portal login. Their data is retained for records. This can be reversed by Re-admitting.
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 space-y-2">
+              <p className="font-bold text-red-800">⚠️ This action is PERMANENT and cannot be undone.</p>
+              <p>Vacating <strong>{student.name}</strong> will:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Free their room and bed immediately</li>
+                <li>Delete ALL student data (invoices, payments, documents, complaints)</li>
+                <li>Delete their login account permanently</li>
+                <li>Auto-logout their student portal session</li>
+              </ul>
+              <p className="text-xs font-semibold text-red-800 mt-2">There is no re-admission after vacating.</p>
             </div>
             <div className="space-y-1.5">
-              <Label>Vacate Date <span className="text-destructive">*</span></Label>
-              <Input type="date" value={vacateForm.vacateDate} onChange={e => setVacateForm(f => ({ ...f, vacateDate: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Reason <span className="text-destructive">*</span></Label>
-              <Textarea value={vacateForm.reason} onChange={e => setVacateForm(f => ({ ...f, reason: e.target.value }))} placeholder="Reason for vacating..." />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Deposit Refund (₹)</Label>
-                <Input type="number" value={vacateForm.depositRefundAmount} onChange={e => setVacateForm(f => ({ ...f, depositRefundAmount: Number(e.target.value) }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Damage Deduction (₹)</Label>
-                <Input type="number" value={vacateForm.damageAmount} onChange={e => setVacateForm(f => ({ ...f, damageAmount: Number(e.target.value) }))} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Inspection Notes</Label>
-              <Textarea value={vacateForm.inspectionNotes} onChange={e => setVacateForm(f => ({ ...f, inspectionNotes: e.target.value }))} placeholder="Room condition notes..." />
+              <Label>Type student name to confirm <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder={student.name}
+                value={vacateForm.reason}
+                onChange={e => setVacateForm(f => ({ ...f, reason: e.target.value }))}
+              />
+              <p className="text-xs text-gray-400">Type exactly: <strong>{student.name}</strong></p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setVacateOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => vacate.mutate()} disabled={vacate.isPending || !vacateForm.vacateDate || !vacateForm.reason}>
-              {vacate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><UserX className="w-4 h-4" /> Confirm Vacate</>}
+            <Button variant="destructive"
+              onClick={() => vacate.mutate()}
+              disabled={vacate.isPending || vacateForm.reason.trim().toLowerCase() !== student.name.trim().toLowerCase()}>
+              {vacate.isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</>
+                : <><UserX className="w-4 h-4" /> Confirm Vacate & Delete</>}
             </Button>
           </DialogFooter>
         </DialogContent>
