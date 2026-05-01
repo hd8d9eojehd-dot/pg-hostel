@@ -207,9 +207,9 @@ export default function WhatsAppPage() {
                         alt="WhatsApp QR Code"
                         className="w-56 h-56 rounded-2xl border-2 border-gray-200 shadow-sm"
                       />
-                      {status.savedAt && (
+                      {status.qrSavedAt && (
                         <p className="text-[10px] text-gray-400 text-center">
-                          Generated: {new Date(status.savedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          Generated: {new Date(status.qrSavedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </p>
                       )}
                     </>
