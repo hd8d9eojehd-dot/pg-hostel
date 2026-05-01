@@ -1,0 +1,11 @@
+node_modules
+dist
+whatsapp-session
+.wwebjs_cache
+.wwebjs_auth
+prisma/migrations
+src/tests
+src/scripts
+*.log
+.env
+.env.*
