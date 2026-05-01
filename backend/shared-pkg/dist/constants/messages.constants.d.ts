@@ -1,0 +1,34 @@
+export declare const MESSAGES: {
+    readonly LOGIN_SUCCESS: "Login successful";
+    readonly LOGOUT_SUCCESS: "Logged out successfully";
+    readonly INVALID_CREDENTIALS: "Invalid credentials";
+    readonly UNAUTHORIZED: "Unauthorized access";
+    readonly FORBIDDEN: "You do not have permission to perform this action";
+    readonly TOKEN_EXPIRED: "Session expired. Please login again.";
+    readonly STUDENT_CREATED: "Student admitted successfully";
+    readonly STUDENT_UPDATED: "Student details updated";
+    readonly STUDENT_NOT_FOUND: "Student not found";
+    readonly STUDENT_VACATED: "Student vacated successfully";
+    readonly ROOM_CREATED: "Room created successfully";
+    readonly ROOM_UPDATED: "Room updated successfully";
+    readonly ROOM_NOT_FOUND: "Room not found";
+    readonly BED_OCCUPIED: "This bed is already occupied";
+    readonly ROOM_FULL: "Room is fully occupied";
+    readonly INVOICE_CREATED: "Invoice created successfully";
+    readonly PAYMENT_RECORDED: "Payment recorded successfully";
+    readonly INVOICE_NOT_FOUND: "Invoice not found";
+    readonly COMPLAINT_CREATED: "Complaint submitted successfully";
+    readonly COMPLAINT_UPDATED: "Complaint updated";
+    readonly COMPLAINT_RESOLVED: "Complaint resolved";
+    readonly NOTICE_CREATED: "Notice created";
+    readonly NOTICE_PUBLISHED: "Notice published successfully";
+    readonly OUTPASS_CREATED: "Outpass request submitted";
+    readonly OUTPASS_APPROVED: "Outpass approved";
+    readonly OUTPASS_REJECTED: "Outpass rejected";
+    readonly OUTPASS_RETURNED: "Return confirmed";
+    readonly NOT_FOUND: "Resource not found";
+    readonly VALIDATION_ERROR: "Validation failed";
+    readonly SERVER_ERROR: "Internal server error";
+    readonly SUCCESS: "Operation successful";
+};
+//# sourceMappingURL=messages.constants.d.ts.map

@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MEAL_TYPE = exports.ADMIN_ROLE = exports.DOC_TYPE = exports.OUTPASS_STATUS = exports.OUTPASS_TYPE = exports.NOTICE_PRIORITY = exports.NOTICE_CATEGORY = exports.COMPLAINT_PRIORITY = exports.COMPLAINT_STATUS = exports.COMPLAINT_CATEGORY = exports.PAYMENT_MODE = exports.INVOICE_TYPE = exports.INVOICE_STATUS = exports.STAY_DURATION = exports.RENT_PACKAGE = exports.BED_LABEL = exports.ROOM_TYPE = exports.ROOM_STATUS = exports.STUDENT_STATUS = void 0;
+exports.STUDENT_STATUS = ['active', 'reserved', 'pending', 'vacated', 'suspended'];
+exports.ROOM_STATUS = ['available', 'occupied', 'partial', 'maintenance', 'blocked'];
+exports.ROOM_TYPE = ['single', 'double', 'triple', 'quad'];
+exports.BED_LABEL = ['A', 'B', 'C', 'D', 'E', 'F'];
+exports.RENT_PACKAGE = ['monthly', 'semester', 'annual'];
+exports.STAY_DURATION = ['3months', '6months', '1year'];
+exports.INVOICE_STATUS = ['paid', 'partial', 'due', 'overdue', 'waived'];
+exports.INVOICE_TYPE = ['rent', 'deposit', 'extra', 'damage', 'fine', 'other'];
+exports.PAYMENT_MODE = ['cash', 'bank_transfer', 'upi', 'online', 'cheque'];
+exports.COMPLAINT_CATEGORY = ['wifi', 'fan', 'light', 'water', 'cleaning', 'food', 'furniture', 'plumbing', 'pest', 'noise', 'other'];
+exports.COMPLAINT_STATUS = ['new', 'assigned', 'in_progress', 'resolved', 'closed'];
+exports.COMPLAINT_PRIORITY = ['low', 'medium', 'high', 'urgent'];
+exports.NOTICE_CATEGORY = ['general', 'rent', 'food', 'maintenance', 'rules', 'emergency', 'event'];
+exports.NOTICE_PRIORITY = ['low', 'medium', 'high', 'urgent'];
+exports.OUTPASS_TYPE = ['outpass', 'leave', 'sem_holiday'];
+exports.OUTPASS_STATUS = ['pending', 'approved', 'rejected', 'returned', 'cancelled'];
+exports.DOC_TYPE = ['aadhaar', 'college_id', 'agreement', 'photo', 'payment_proof', 'other'];
+exports.ADMIN_ROLE = ['super_admin', 'staff'];
+exports.MEAL_TYPE = ['breakfast', 'lunch', 'snacks', 'dinner'];
+//# sourceMappingURL=status.constants.js.map

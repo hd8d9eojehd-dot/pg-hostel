@@ -1,8 +1,11 @@
 node_modules/
 dist/
+# But keep shared-pkg/dist (needed for Vercel build)
+!shared-pkg/dist/
 *.log
 .env
 whatsapp-session/
 .wwebjs_cache/
 coverage/
 *.tsbuildinfo
+.vercel
