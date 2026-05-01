@@ -34,7 +34,7 @@ async function printQrInTerminal(qrString: string): Promise<void> {
     // Fallback: use the qrcode package to print UTF-8 blocks
     try {
       const QRCode = await import('qrcode')
-      const text = await QRCode.toString(qrString, { type: 'terminal' as 'svg', margin: 1 })
+      const text = await QRCode.toString(qrString, { type: 'utf8', small: true, margin: 1 })
       console.log('\n' + text)
     } catch {
       // Last resort: just print the raw string

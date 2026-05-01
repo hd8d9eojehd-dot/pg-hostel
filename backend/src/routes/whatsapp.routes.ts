@@ -40,7 +40,7 @@ whatsappRouter.post('/clear-qr', requireAdmin, async (_req, res) => {
     const existing = await prisma.settings.findUnique({ where: { branchId: branch.id }, select: { staffPermissions: true } })
     const perms = (existing?.staffPermissions as Record<string, unknown>) ?? {}
     const { whatsappQr: _q, whatsappQrSavedAt: _t, ...rest } = perms as { whatsappQr?: string; whatsappQrSavedAt?: string; [k: string]: unknown }
-    await prisma.settings.update({ where: { branchId: branch.id }, data: { staffPermissions: rest as Parameters<typeof prisma.settings.update>[0]['data']['staffPermissions'] } })
+    await prisma.settings.update({ where: { branchId: branch.id }, data: { staffPermissions: rest } })
     res.json({ success: true, message: 'QR cleared' })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })

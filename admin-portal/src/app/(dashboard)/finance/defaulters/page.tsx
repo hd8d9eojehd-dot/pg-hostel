@@ -31,7 +31,7 @@ export default function DefaultersPage() {
 
   const pgName = branch?.name ?? 'PG Hostel'
   const pgContact = branch?.contactPrimary ?? ''
-  const studentPortalUrl = process.env['NEXT_PUBLIC_STUDENT_PORTAL_URL'] ?? 'https://south-pg-students.vercel.app'
+  const studentPortalUrl = process.env['NEXT_PUBLIC_STUDENT_PORTAL_URL'] ?? 'http://localhost:3001'
 
   const sendReminders = useMutation({
     mutationFn: () => api.post('/whatsapp/send-bulk', {

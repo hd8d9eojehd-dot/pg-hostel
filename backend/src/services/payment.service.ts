@@ -18,8 +18,8 @@ export async function initiatePayment(input: InitiatePaymentInput) {
   try {
     const orderId = `PG-${Date.now()}-${input.invoiceId.slice(0, 8)}`
 
-    // Always use production backend URL for webhook (Vercel deployment)
-    const notifyUrl = 'https://backend-sim2435s-projects.vercel.app/api/v1/payment/webhook'
+    // Always use production backend URL for webhook
+    const notifyUrl = `${process.env['BACKEND_URL'] ?? 'http://localhost:4000'}/api/v1/payment/webhook`
 
     // Sanitize phone — Cashfree requires exactly 10 digits
     const cleanPhone = input.studentMobile.replace(/\D/g, '').replace(/^91/, '').slice(-10)

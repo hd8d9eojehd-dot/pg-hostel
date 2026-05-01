@@ -30,6 +30,7 @@ const EnvSchema = z.object({
   OTP_MAX_ATTEMPTS: z.string().default('3').transform(Number),
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
   IDCARD_BASE_URL: z.string().optional(),
+  BACKEND_URL: z.string().optional(),
 })
 
 // Always parse with defaults — never crash on missing env vars
